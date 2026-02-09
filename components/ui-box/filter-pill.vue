@@ -33,10 +33,10 @@ const handleClick = () => {
 
 <style scoped>
 .filter-pill {
-  height: 68rpx;
-  padding: 0 16rpx;
-  border-radius: 16rpx;
-  background: rgba(229, 229, 229, 0.2);
+  height: 36rpx;
+  padding: 0 10rpx;
+  border-radius: 18rpx;
+  background: rgba(229, 229, 229, 0.4);
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -45,11 +45,11 @@ const handleClick = () => {
 }
 
 .filter-pill--active {
-  background: rgba(101, 177, 254, 0.15);
+  background: rgba(101, 177, 254, 0.2);
 }
 
 .label {
-  font-size: 24rpx;
+  font-size: 18rpx;
   color: #333333;
   font-weight: 500;
 }
@@ -61,17 +61,17 @@ const handleClick = () => {
 }
 
 .value {
-  font-size: 22rpx;
+  font-size: 16rpx;
   color: #888888;
-  margin-right: 8rpx;
+  margin-right: 4rpx;
 }
 
 /* 简单的下拉小箭头 */
 .arrow-icon {
   width: 0;
   height: 0;
-  border-left: 8rpx solid transparent;
-  border-right: 8rpx solid transparent;
-  border-top: 10rpx solid #bbbbbb;
+  border-left: 5rpx solid transparent;
+  border-right: 5rpx solid transparent;
+  border-top: 6rpx solid #999999;
 }
 </style>

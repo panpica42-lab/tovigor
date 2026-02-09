@@ -79,6 +79,8 @@
 				:text="currentCoachTip"
 				contentBackground="rgba(255, 255, 255, 0.85)"
 				:showShadow="true"
+				:clickable="true"
+				@coach-click="openCoachModal"
 			/>
 		</view>
 		
@@ -195,6 +197,14 @@
 				</view>
 			</view>
 		</view>
+		
+		<!-- AI教练选择弹窗 -->
+		<CoachDetailModal
+			v-model:show="showCoachModal"
+			:coachData="selectedCoach"
+			:switchable="true"
+			@select="handleCoachSelect"
+		/>
 	</view>
 </template>
 
@@ -204,7 +214,8 @@ import { onShow } from '@dcloudio/uni-app'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
 import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
-import { getSelectedCoach } from '@/utils/coachManager.js'
+import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 
 // ========== 训练数据 ==========
 const currentExerciseName = ref('站姿肩关节环绕')
@@ -229,6 +240,24 @@ const selectedCoach = ref(null)
 const coachRoleLabel = computed(() => selectedCoach.value?.fullName || 'Vince(艾斯)')
 const coachAvatarUrl = computed(() => selectedCoach.value?.avatar || '/static/icons/partTrainingActivity/AI_coach_Vince.png')
 const coachBadgeBackground = computed(() => selectedCoach.value?.badgeBackground || 'linear-gradient(135deg, #4A90E2 0%, #357ABD 100%)')
+
+// 教练选择弹窗状态
+const showCoachModal = ref(false)
+
+// 打开教练选择弹窗
+const openCoachModal = () => {
+	showCoachModal.value = true
+}
+
+// 处理教练选择
+const handleCoachSelect = (coachData) => {
+	setSelectedCoach(coachData.value)
+	selectedCoach.value = coachData
+	uni.showToast({
+		title: `已切换为${coachData.label}`,
+		icon: 'success'
+	})
+}
 
 // AI教练提示语
 const coachTips = [

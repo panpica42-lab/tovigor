@@ -18,6 +18,11 @@ uni_modules/wzl-serialbridge/
             └── serialbridge-debug.aar  ✅ 你的 AAR (60KB)
 ```
 
+### 2. 代码清理
+- ✅ 删除 `nativeplugins/SerialBridge-Plugin/` 旧插件目录
+- ✅ 删除 `SerialBridge-Studio/` Android Studio 项目
+- ✅ 移除 `manifest.json` 中的 `nativePlugins` 配置
+
 ### 3. 测试页面更新
 - ✅ `pages/serial-test/serial-test.vue` 已更新为使用新 UTS 插件
 - ✅ 导入方式: `import { openSerial, ... } from '@/uni_modules/wzl-serialbridge'`

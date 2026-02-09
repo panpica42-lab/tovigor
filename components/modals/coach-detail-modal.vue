@@ -1,7 +1,7 @@
 <!--
  * AI教练详情弹窗组件
  * 功能：展示教练的详细信息，包括头像、姓名、简介、特长等
- * 使用场景：在筛选栏点击教练卡片时弹出
+ * 使用场景：在筛选栏点击教练卡片时弹出，或在训练页点击气泡切换教练
  -->
 <template>
 	<view v-if="show" class="modal-mask" @click.self="handleMaskClick">
@@ -14,11 +14,27 @@
 				@click="handleClose"
 			/>
 			
+			<!-- 标题（可切换模式下显示） -->
+			<text v-if="switchable" class="modal-title">AI教练</text>
+			
+			<!-- 切换按钮区域 -->
+			<view v-if="switchable" class="switch-buttons">
+				<view 
+					v-for="coach in allCoaches" 
+					:key="coach.value"
+					class="switch-btn"
+					:class="{ 'switch-btn-active': currentCoachValue === coach.value }"
+					@click="switchCoach(coach.value)"
+				>
+					<text class="switch-btn-text">{{ coach.fullName }}</text>
+				</view>
+			</view>
+			
 			<!-- 教练头像 -->
 			<view class="coach-avatar-section">
 				<image 
 					class="coach-avatar-large" 
-					:src="coachData.avatar" 
+					:src="displayCoach.avatar" 
 					mode="aspectFit"
 				/>
 			</view>
@@ -26,18 +42,18 @@
 			<!-- 教练信息 -->
 			<view class="coach-info-section">
 				<!-- 教练姓名 -->
-				<text class="coach-name">{{ coachData.label }}</text>
+				<text class="coach-name">{{ displayCoach.label }}</text>
 				
 				<!-- 教练英文名 -->
-				<text class="coach-english-name">{{ coachData.englishName }}</text>
+				<text class="coach-english-name">{{ displayCoach.englishName }}</text>
 				
 				<!-- 教练简介 -->
-				<text class="coach-intro">{{ coachData.intro }}</text>
+				<text class="coach-intro">{{ displayCoach.intro }}</text>
 				
 				<!-- 教练特长标签 -->
 				<view class="coach-tags">
 					<view 
-						v-for="(tag, index) in coachData.tags" 
+						v-for="(tag, index) in displayCoach.tags" 
 						:key="index"
 						class="tag-chip"
 					>
@@ -48,14 +64,15 @@
 			
 			<!-- 选择按钮 -->
 			<view class="select-btn" @click="handleSelect">
-				<text class="select-btn-text">选择{{ coachData.label }}</text>
+				<text class="select-btn-text">选择{{ displayCoach.label }}</text>
 			</view>
 		</view>
 	</view>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { getAllCoaches, getCoachByValue } from '@/utils/coachManager.js'
 
 // Props
 const props = defineProps({
@@ -64,7 +81,7 @@ const props = defineProps({
 		type: Boolean,
 		default: false
 	},
-	// 教练数据
+	// 教练数据（外部传入，用于非切换模式）
 	coachData: {
 		type: Object,
 		default: () => ({
@@ -75,11 +92,43 @@ const props = defineProps({
 			intro: '',
 			tags: []
 		})
+	},
+	// 是否可切换教练（训练页使用时为 true）
+	switchable: {
+		type: Boolean,
+		default: false
 	}
 })
 
 // Emits
 const emits = defineEmits(['update:show', 'select'])
+
+// 获取所有教练
+const coachesObj = getAllCoaches()
+const allCoaches = computed(() => Object.values(coachesObj))
+
+// 当前选中的教练 value（用于切换模式）
+const currentCoachValue = ref('')
+
+// 显示的教练数据
+const displayCoach = computed(() => {
+	if (props.switchable && currentCoachValue.value) {
+		return getCoachByValue(currentCoachValue.value) || props.coachData
+	}
+	return props.coachData
+})
+
+// 监听弹窗显示，初始化当前教练
+watch(() => props.show, (newVal) => {
+	if (newVal && props.switchable) {
+		currentCoachValue.value = props.coachData.value || 'vince'
+	}
+})
+
+// 切换教练
+const switchCoach = (coachValue) => {
+	currentCoachValue.value = coachValue
+}
 
 // 关闭弹窗
 const handleClose = () => {
@@ -93,7 +142,7 @@ const handleMaskClick = () => {
 
 // 选择教练
 const handleSelect = () => {
-	emits('select', props.coachData)
+	emits('select', displayCoach.value)
 	handleClose()
 }
 </script>
@@ -129,7 +178,7 @@ const handleSelect = () => {
 .close-btn {
 	position: absolute;
 	top: 16rpx;
-	right: 16rpx;
+	left: 16rpx;
 	width: 32rpx;
 	height: 32rpx;
 	z-index: 10;
@@ -137,6 +186,44 @@ const handleSelect = () => {
 	&:active {
 		opacity: 0.7;
 	}
+}
+
+/* ========== 标题 ========== */
+.modal-title {
+	font-size: 36rpx;
+	font-weight: 700;
+	color: #FFFFFF;
+	margin-bottom: 24rpx;
+}
+
+/* ========== 切换按钮区域 ========== */
+.switch-buttons {
+	display: flex;
+	flex-direction: row;
+	gap: 24rpx;
+	margin-bottom: 24rpx;
+}
+
+.switch-btn {
+	padding: 12rpx 32rpx;
+	border-radius: 24rpx;
+	background: rgba(255, 255, 255, 0.1);
+	border: 2rpx solid rgba(255, 255, 255, 0.3);
+}
+
+.switch-btn-active {
+	background: linear-gradient(135deg, #00C853 0%, #00E676 100%);
+	border-color: transparent;
+}
+
+.switch-btn-text {
+	font-size: 24rpx;
+	font-weight: 500;
+	color: #FFFFFF;
+}
+
+.switch-btn:active {
+	opacity: 0.8;
 }
 
 /* ========== 教练头像区域 ========== */

@@ -247,10 +247,10 @@ const genderOptions = [
 
 const goalOptions = [
 	{ value: 'fat-loss', label: '减脂塑形' },
-	{ value: 'strength', label: '力量增强' },
-	{ value: 'shaping', label: '塑形紧致' },
-	{ value: 'cardio', label: '有氧训练' },
-	{ value: 'flexibility', label: '柔韧拉伸' }
+	{ value: 'muscle', label: '增肌增力' },
+	{ value: 'health', label: '全面健康' },
+	{ value: 'wellness', label: '健康养生' },
+	{ value: 'youth', label: '青少年适能' }
 ]
 
 const levelOptions = [
@@ -264,43 +264,44 @@ const partOptions = [
 	{ value: 'chest', label: '胸部' },
 	{ value: 'back', label: '背部' },
 	{ value: 'arm', label: '手臂' },
-	{ value: 'core', label: '核心' },
-	{ value: 'leg', label: '腿部' },
-	{ value: 'glute', label: '臀部' }
+	{ value: 'core', label: '腹部' },
+	{ value: 'leg', label: '臀腿' },
+	{ value: 'full-body', label: '全身' }
 ]
 
 const methodOptions = [
-	{ value: 'resistance', label: '阻力训练' },
-	{ value: 'hiit', label: 'HIIT' },
-	{ value: 'circuit', label: '循环训练' },
-	{ value: 'bodyweight', label: '自重训练' }
+	{ value: 'resistance', label: '有力臂' },
+	{ value: 'no-resistance', label: '无力臂' }
 ]
 
 const durationOptions = [
-	{ value: '0-15', label: '15min以内' },
-	{ value: '15-30', label: '15-30min' },
-	{ value: '30-45', label: '30-45min' },
-	{ value: '45+', label: '45min以上' }
+	{ value: '0-15', label: '<15min' },
+	{ value: '15-25', label: '15-25min' },
+	{ value: '25-40', label: '25-40min' },
+	{ value: '40+', label: '>40min' }
 ]
 
 const equipmentOptions = [
-	{ value: 'none', label: '无器械' },
 	{ value: 'dumbbell', label: '哑铃' },
 	{ value: 'barbell', label: '杠铃' },
 	{ value: 'kettlebell', label: '壶铃' },
 	{ value: 'resistance-band', label: '弹力带' },
-	{ value: 'trx', label: 'TRX' }
+	{ value: 'foam-roller', label: '泡沫轴' },
+	{ value: 'yoga-mat', label: '瑜伽垫' },
+	{ value: 'pull-up-bar', label: '单杠' },
+	{ value: 'rope', label: '绳索' },
+	{ value: 'bicep-curl', label: '肱二头' }
 ]
 
 const coachOptions = [
 	{
 		value: 'vince',
-		label: 'Vince 艾斯',
+		label: 'Vince\n艾斯',
 		avatar: '/static/icons/partTrainingActivity/AI_coach_Vince.png'
 	},
 	{
 		value: 'vera',
-		label: 'Vera 维拉',
+		label: 'Vela\n维拉',
 		avatar: '/static/icons/partTrainingActivity/AI_coach_Vera.png'
 	}
 ]
@@ -415,12 +416,14 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .sidebar {
-	width: 180rpx;
-	padding: 0 12rpx 16rpx;
-	border-radius: 24rpx;
-	background-color: #F3F4F6;
+	width: 240rpx;
+	padding: 8rpx 8rpx 12rpx;
+	border-radius: 16rpx;
+	background-color: rgba(243, 244, 246, 0.95);
 	display: flex;
 	flex-direction: column;
+	height: 100%;
+	overflow: hidden;
 }
 
 /* ========== 顶部 AI 推荐块 ========== */
@@ -428,31 +431,32 @@ onMounted(() => {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	margin-bottom: 20rpx;
+	margin-bottom: 8rpx;
+	flex-shrink: 0;
 }
 
 .ai-recommend-btn {
 	width: 100%;
-	height: 80rpx;
-	border-radius: 20rpx;
+	height: 56rpx;
+	border-radius: 28rpx;
 	background: rgba(101, 177, 254, 1);
 	display: flex;
 	flex-direction: row;
 	align-items: center;
 	justify-content: center;
-	gap: 12rpx;
+	gap: 6rpx;
 	position: relative;
-	padding: 0 12rpx;
+	padding: 0 8rpx;
 }
 
 .ai-avatar {
-	width: 56rpx;
-	height: 56rpx;
+	width: 40rpx;
+	height: 40rpx;
 	flex-shrink: 0;
 }
 
 .ai-text {
-	font-size: 22rpx;
+	font-size: 18rpx;
 	font-weight: bold;
 	color: #000000;
 	letter-spacing: 1rpx;
@@ -461,28 +465,28 @@ onMounted(() => {
 /* ========== 筛选列表 ========== */
 .filter-scroll {
 	flex: 1;
-	max-height: 900rpx;
+	overflow: hidden;
 }
 
 .filter-list {
 	display: flex;
 	flex-direction: column;
-	gap: 12rpx;
+	gap: 4rpx;
 }
 
 /* 筛选标题 */
 .filter-title {
-	height: 68rpx;
-	padding: 0 16rpx;
-	border-radius: 16rpx;
+	height: 36rpx;
+	padding: 0 10rpx;
+	border-radius: 10rpx;
 	background: rgba(200, 200, 200, 0.3);
 	display: flex;
 	align-items: center;
-	justify-content: center;
+	justify-content: flex-start;
 }
 
 .filter-title-text {
-	font-size: 24rpx;
+	font-size: 18rpx;
 	color: #666666;
 	font-weight: 600;
 }
@@ -490,21 +494,22 @@ onMounted(() => {
 /* ========== 展开选项区域 ========== */
 .filter-options {
 	display: flex;
-	flex-direction: column;
-	gap: 8rpx;
-	padding: 8rpx 0;
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: 4rpx;
+	padding: 2rpx 0;
 }
 
 .option-chip {
-	height: 56rpx;
-	padding: 0 16rpx;
-	border-radius: 12rpx;
-	background: rgba(255, 255, 255, 0.6);
+	height: 32rpx;
+	padding: 0 10rpx;
+	border-radius: 16rpx;
+	background: rgba(255, 255, 255, 0.8);
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	transition: all 0.2s ease;
-	border: 2rpx solid transparent;
+	border: 1rpx solid rgba(200, 200, 200, 0.5);
 }
 
 .option-chip--active {
@@ -513,8 +518,9 @@ onMounted(() => {
 }
 
 .option-text {
-	font-size: 22rpx;
+	font-size: 16rpx;
 	color: #333333;
+	white-space: nowrap;
 }
 
 .option-chip--active .option-text {
@@ -526,39 +532,40 @@ onMounted(() => {
 .coach-options {
 	display: flex;
 	flex-direction: column;
-	gap: 12rpx;
-	padding: 8rpx 0;
+	gap: 4rpx;
+	padding: 2rpx 0;
 }
 
 .coach-card {
-	min-height: 72rpx;
-	padding: 12rpx;
-	border-radius: 16rpx;
+	height: 44rpx;
+	padding: 4rpx 6rpx;
+	border-radius: 10rpx;
 	background: #1E3A8A;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 12rpx;
+	gap: 4rpx;
 	transition: all 0.2s ease;
-	border: 3rpx solid transparent;
+	border: 2rpx solid transparent;
 }
 
 .coach-card--active {
 	border-color: #00C853;
-	box-shadow: 0 4rpx 12rpx rgba(0, 200, 83, 0.3);
+	box-shadow: 0 2rpx 8rpx rgba(0, 200, 83, 0.3);
 }
 
 .coach-avatar {
-	width: 48rpx;
-	height: 48rpx;
+	width: 32rpx;
+	height: 32rpx;
 	flex-shrink: 0;
 }
 
 .coach-name {
 	flex: 1;
-	font-size: 22rpx;
+	font-size: 16rpx;
 	color: #FFFFFF;
 	font-weight: 600;
-	line-height: 1.3;
+	line-height: 1.1;
+	white-space: pre-line;
 }
 </style>

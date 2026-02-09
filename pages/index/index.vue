@@ -71,7 +71,10 @@
 			<view class="section-header">
 				<text class="section-title">课程推荐</text>
 				<view class="serial-test-btn" @click="goToSerialTest">
-					<text class="serial-test-text">串口测试</text>
+					<text class="serial-test-text">串口v1</text>
+				</view>
+				<view class="serial-test-btn serial-test-btn-v2" @click="goToSerialTestV2">
+					<text class="serial-test-text">串口v2</text>
 				</view>
 			</view>
 
@@ -138,12 +141,6 @@ const courseList = ref([
 		duration: '28min'
 	}
 ])
-//tovigor_v1\static\icons\partTrainingActivity\ic_1x.jpg
-//tovigor_v1\static\icons\partTrainingActivity\ic_2x.jpg
-//tovigor_v1\static\icons\partTrainingActivity\ic_4x.jpg
-///static/icons/homeActivity/ic_course_01.png
-///static/icons/homeActivity/ic_course_02.png
-///static/icons/homeActivity/ic_course_03.png
 const scrollHeight = ref(0)
 let resizeHandler = null
 
@@ -207,10 +204,17 @@ const goToSmartAssess = () => {
 	})
 }
 
-// 跳转到串口测试页面
+// 跳转到串口测试页面 v1
 const goToSerialTest = () => {
 	uni.navigateTo({
 		url: '/pages/serial-test/serial-test'
+	})
+}
+
+// 跳转到串口测试页面 v2 (Service 架构)
+const goToSerialTestV2 = () => {
+	uni.navigateTo({
+		url: '/pages/serial-test/serial-test-v2'
 	})
 }
 
@@ -459,6 +463,10 @@ page {
 	border-radius: 50rpx;
 	padding: 15rpx 30rpx;
 	margin-left: 20rpx;
+}
+
+.serial-test-btn-v2 {
+	background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
 }
 
 .serial-test-text {

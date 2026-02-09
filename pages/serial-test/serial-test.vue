@@ -21,7 +21,7 @@
       <text class="section-title">1. 设备配置</text>
       <view class="form-item">
         <text class="label">设备路径:</text>
-        <input v-model="devicePath" class="input" placeholder="/dev/ttyS3" />
+        <input v-model="devicePath" class="input" placeholder="/dev/ttyUSB0" />
       </view>
       <view class="form-item">
         <text class="label">波特率:</text>
@@ -66,7 +66,16 @@
         <text class="label">快捷命令:</text>
         <button @click="handleSendQuick('73B4000A01002AF365')" class="btn btn-small">恒10</button>
         <button @click="handleSendQuick('73B400050000E1BB65')" class="btn btn-small">力量关闭</button>
-        <button @click="handleSendQuick('AA5503BB')" class="btn btn-small">测试3</button>
+        <button 
+          @click="toggleStressTest" 
+          class="btn btn-small btn-stress" 
+          :class="{ 'btn-stress-active': isStressTesting }"
+        >压测</button>
+        <button 
+          @click="toggleStressTest2" 
+          class="btn btn-small btn-stress" 
+          :class="{ 'btn-stress-active': isStressTesting2 }"
+        >压测2 <text v-if="isStressTesting2">({{ stressTest2Remaining }})</text></button>
       </view>
     </view>
     
@@ -148,19 +157,36 @@ onMounted(() => {
   uni.showToast({ title: '插件已加载', icon: 'success', duration: 1500 })
 })
 
-const devicePath = ref('/dev/ttyS3')
+const devicePath = ref('/dev/ttyUSB0')
 const baudRates = ref([9600, 19200, 38400, 57600, 115200, 230400, 460800])
 const baudRateIndex = ref(4) // 默认 115200
 const isConnected = ref(false)
 const sendData = ref('')
 const receivedMessages = ref([])
 const stats = ref(null)
-const maxMessages = 100
+const maxMessages = 500  // 增大消息缓存，满足压测需求
 let currentPortId = 0 // 当前串口句柄 ID
+
+// 批量 UI 更新优化：使用非响应式缓冲区收集数据，定时同步到显示层
+let messageBuffer = []  // 非响应式缓冲区
+let uiRefreshTimer = null  // UI 刷新定时器
+const UI_REFRESH_INTERVAL = 200  // UI 刷新间隔 (ms)，5Hz 足够人眼观察
+
+// 压测相关
+const isStressTesting = ref(false)
+let stressTestTimer = null
+
+// 压测2相关（固定200条）
+const isStressTesting2 = ref(false)
+const stressTest2Remaining = ref(0)
+let stressTest2Timer = null
 
 
 onBeforeUnmount(() => {
-  // 页面销毁前关闭串口
+  // 页面销毁前停止所有定时器和关闭串口
+  stopReading()       // 停止轮询（重要！）
+  stopStressTest()
+  stopStressTest2()
   if (isConnected.value && currentPortId > 0) {
     closeSerial({
       portId: currentPortId,
@@ -277,10 +303,21 @@ const handleClosePort = () => {
 let readTimer = null
 
 // TODO: ⚠️ 正式业务需实现帧解析！当前简单轮询会导致拆包/粘包，需根据帧头0x73和帧尾0x65进行协议解析
+// 
+// 轮询参数说明（针对 96 字节/包，115200 波特率）：
+//   - 96字节包传输耗时 able 8.3ms
+//   - 5Hz压测 = 每200ms发送一次，回传也约200ms一包
+//   - 轮询间隔需 < 200ms 避免缓冲区积压
+//   - 建议：轮询 50ms，timeout 30ms，可及时读取每个包
+const READ_INTERVAL = 50   // 轮询间隔 (ms)
+const READ_TIMEOUT = 30    // 读取超时 (ms)
+
 const startReading = () => {
   stopReading() // 先停止之前的定时器
   
-  // 每 250ms 尝试读取一次数据（需大于 readSerial 的 timeout）
+  // 启动 UI 刷新定时器（批量同步缓冲区到响应式变量）
+  startUiRefresh()
+  
   readTimer = setInterval(() => {
     if (!isConnected.value || currentPortId === 0) {
       stopReading()
@@ -289,38 +326,61 @@ const startReading = () => {
     
     readSerial({
       portId: currentPortId,
-      length: 1024,
+      length: 96,  // 每次读取一个完整包的大小，避免粘包
       format: 'hex',
-      timeout: 150,
+      timeout: READ_TIMEOUT,
       success: (res) => {
         if (res.bytesRead > 0) {
-          console.log('接收到数据:', res.data)
-          receivedMessages.value.unshift({
+          // 写入非响应式缓冲区，避免频繁触发 Vue 更新
+          messageBuffer.unshift({
             data: res.data,
             bytes: res.bytesRead,
             ts: Date.now()
           })
           
-          // 限制消息数量
-          if (receivedMessages.value.length > maxMessages) {
-            receivedMessages.value.pop()
+          // 限制缓冲区大小
+          if (messageBuffer.length > maxMessages) {
+            messageBuffer.pop()
           }
         }
       },
       fail: (err) => {
+        // 如果是主动断开导致的错误，忽略（竞态条件）
+        if (!isConnected.value) {
+          return
+        }
         // 超时不提示，其他错误提示
         if (err.errCode !== 10003) {
           console.error('读取失败:', err)
         }
       }
     })
-  }, 250)
+  }, READ_INTERVAL)
 }
 
 const stopReading = () => {
   if (readTimer) {
     clearInterval(readTimer)
     readTimer = null
+  }
+  stopUiRefresh()
+}
+
+// UI 刷新定时器：批量同步缓冲区到响应式变量
+const startUiRefresh = () => {
+  stopUiRefresh()
+  uiRefreshTimer = setInterval(() => {
+    if (messageBuffer.length > 0) {
+      // 一次性同步到响应式变量，只触发一次 Vue 更新
+      receivedMessages.value = [...messageBuffer]
+    }
+  }, UI_REFRESH_INTERVAL)
+}
+
+const stopUiRefresh = () => {
+  if (uiRefreshTimer) {
+    clearInterval(uiRefreshTimer)
+    uiRefreshTimer = null
   }
 }
 
@@ -367,7 +427,7 @@ const handleSendCommand = () => {
     format: 'hex',
     timeout: 1000,
     success: (res) => {
-      console.log('发送成功:', res)
+      // console.log('发送成功:', res) // 暂时注释日志打印
       uni.showToast({ 
         title: `已发送 ${res.bytesWritten} 字节`, 
         icon: 'success',
@@ -388,7 +448,119 @@ const handleSendQuick = (data) => {
   sendData.value = data
 }
 
+// 压测功能：以5Hz频率发送恒10命令
+const toggleStressTest = () => {
+  if (!isConnected.value || currentPortId === 0) {
+    uni.showToast({ 
+      title: '请先打开串口', 
+      icon: 'none' 
+    })
+    return
+  }
+  
+  if (isStressTesting.value) {
+    // 停止压测
+    stopStressTest()
+    uni.showToast({ title: '压测已停止', icon: 'none', duration: 1000 })
+  } else {
+    // 开始压测
+    isStressTesting.value = true
+    const stressData = '73B4000A01002AF365' // 恒10命令
+    
+    // 5Hz = 每200ms发送一次
+    stressTestTimer = setInterval(() => {
+      if (!isConnected.value || currentPortId === 0) {
+        stopStressTest()
+        return
+      }
+      
+      writeSerial({
+        portId: currentPortId,
+        data: stressData,
+        format: 'hex',
+        timeout: 100,
+        success: () => {},
+        fail: (err) => {
+          console.error('压测发送失败:', err)
+          stopStressTest()
+        }
+      })
+    }, 200)
+    
+    uni.showToast({ title: '压测已开始 (5Hz)', icon: 'none', duration: 1000 })
+  }
+}
+
+const stopStressTest = () => {
+  if (stressTestTimer) {
+    clearInterval(stressTestTimer)
+    stressTestTimer = null
+  }
+  isStressTesting.value = false
+}
+
+// 压测2功能：以5Hz频率发送固定200条命令
+const toggleStressTest2 = () => {
+  if (!isConnected.value || currentPortId === 0) {
+    uni.showToast({ 
+      title: '请先打开串口', 
+      icon: 'none' 
+    })
+    return
+  }
+  
+  if (isStressTesting2.value) {
+    // 停止压测2
+    stopStressTest2()
+    uni.showToast({ title: '压测2已停止', icon: 'none', duration: 1000 })
+  } else {
+    // 开始压测2
+    isStressTesting2.value = true
+    stressTest2Remaining.value = 200
+    const stressData = '73B4000A01002AF365' // 恒10命令
+    
+    // 5Hz = 每200ms发送一次
+    stressTest2Timer = setInterval(() => {
+      if (!isConnected.value || currentPortId === 0) {
+        stopStressTest2()
+        return
+      }
+      
+      if (stressTest2Remaining.value <= 0) {
+        stopStressTest2()
+        uni.showToast({ title: '压测2完成 (200条)', icon: 'success', duration: 1500 })
+        return
+      }
+      
+      writeSerial({
+        portId: currentPortId,
+        data: stressData,
+        format: 'hex',
+        timeout: 100,
+        success: () => {
+          stressTest2Remaining.value--
+        },
+        fail: (err) => {
+          console.error('压测2发送失败:', err)
+          stopStressTest2()
+        }
+      })
+    }, 200)
+    
+    uni.showToast({ title: '压测2已开始 (200条@5Hz)', icon: 'none', duration: 1000 })
+  }
+}
+
+const stopStressTest2 = () => {
+  if (stressTest2Timer) {
+    clearInterval(stressTest2Timer)
+    stressTest2Timer = null
+  }
+  isStressTesting2.value = false
+}
+
 const clearReceived = () => {
+  messageBuffer = []  // 清空缓冲区
   receivedMessages.value = []
   uni.showToast({
     title: '已清空',
@@ -558,6 +730,19 @@ const formatTime = (timestamp) => {
   padding: 0 20rpx;
   font-size: 24rpx;
   margin-right: 10rpx;
+}
+
+.btn-stress {
+  background-color: #f5f5f5;
+  color: #333;
+  box-shadow: 0 4rpx 8rpx rgba(0, 0, 0, 0.15);
+  transition: all 0.15s ease;
+}
+
+.btn-stress-active {
+  background-color: #424242;
+  color: #fff;
+  box-shadow: inset 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
 }
 
 .btn[disabled] {

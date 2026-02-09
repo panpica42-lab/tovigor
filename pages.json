@@ -105,7 +105,13 @@
 		{
 			"path": "pages/serial-test/serial-test",
 			"style": {
-				"navigationBarTitleText": "串口测试"
+				"navigationBarTitleText": "串口测试 v1"
+			}
+		},
+		{
+			"path": "pages/serial-test/serial-test-v2",
+			"style": {
+				"navigationBarTitleText": "串口测试 v2"
 			}
 		},
 		{

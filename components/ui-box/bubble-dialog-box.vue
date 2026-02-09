@@ -11,7 +11,12 @@
 <template>
 	<view class="bubble-dialog">
 		<!-- 上方小气泡：角色名字 + 头像 -->
-		<view class="bubble-header" :style="{ background: badgeBackground }">
+		<view 
+			class="bubble-header" 
+			:class="{ 'bubble-header-clickable': clickable }"
+			:style="{ background: badgeBackground }"
+			@click="handleHeaderClick"
+		>
 			<text class="role-text">{{ roleLabel }}</text>
 			<image class="role-avatar" :src="avatarUrl" mode="aspectFit" />
 		</view>
@@ -32,6 +37,11 @@
 <script setup>
 // Props
 const props = defineProps({
+	// 是否可点击切换教练
+	clickable: {
+		type: Boolean,
+		default: false
+	},
 	// 角色标签文字（例如："Vince(艾斯)"、"AI助手"）
 	roleLabel: {
 		type: String,
@@ -68,6 +78,16 @@ const props = defineProps({
 		default: true
 	}
 })
+
+// Emits
+const emits = defineEmits(['coach-click'])
+
+// 点击头部处理
+const handleHeaderClick = () => {
+	if (props.clickable) {
+		emits('coach-click')
+	}
+}
 </script>
 
 <style scoped lang="scss">
@@ -92,6 +112,15 @@ const props = defineProps({
 	margin-bottom: -6rpx;  /* 与下方大气泡做一点重叠，看起来是连在一起的 */
 	overflow: hidden;
 	/* 保证底边是干净的一条直线 */
+}
+
+/* 可点击状态 */
+.bubble-header-clickable {
+	cursor: pointer;
+}
+
+.bubble-header-clickable:active {
+	opacity: 0.8;
 }
 
 /* 角色名字文字 */
