@@ -87,26 +87,19 @@
 		<!-- 右侧数据看板区域 -->
 		<view class="data-panels">
 			<!-- 组数/次数看板 -->
-			<view class="data-panel">
-				<view class="panel-icon-wrap">
-					<image class="panel-icon" src="/static/icons/partTrainingActivity/startTraining/icon-sets.svg" mode="aspectFit" />
-				</view>
-				<view class="panel-content">
-					<text class="panel-label">组数/次数</text>
-					<text class="panel-value">{{ currentSet }}/{{ currentRep }}</text>
-				</view>
-			</view>
+			<DataPanel
+				icon="/static/icons/partTrainingActivity/startTraining/icon-sets.svg"
+				label="组数/次数"
+				:value="`${currentSet}/${currentRep}`"
+			/>
 			
 			<!-- 热量/千卡看板 -->
-			<view class="data-panel">
-				<view class="panel-icon-wrap">
-					<image class="panel-icon" src="/static/icons/partTrainingActivity/startTraining/icon-calories.svg" mode="aspectFit" />
-				</view>
-				<view class="panel-content">
-					<text class="panel-label">热量/千卡</text>
-					<text class="panel-value">{{ calories.toFixed(2) }}</text>
-				</view>
-			</view>
+			<DataPanel
+				icon="/static/icons/partTrainingActivity/startTraining/icon-calories.svg"
+				label="热量/千卡"
+				:value="calories"
+				:decimals="2"
+			/>
 		</view>
 		
 		<!-- 虚拟形象模拟缩略图（左下角） -->
@@ -133,12 +126,16 @@
 		
 		<!-- 心率显示区域 -->
 		<view class="heart-rate-section">
-			<view class="heart-rate-display">
-				<image class="heart-icon" src="/static/icons/partTrainingActivity/startTraining/icon-heart.svg" mode="aspectFit" />
-				<text class="heart-label">心率：</text>
-				<text class="heart-value">{{ heartRate }}</text>
-				<text class="heart-unit">次/分钟</text>
-			</view>
+			<!-- 心率看板 -->
+			<DataPanel
+				icon="/static/icons/partTrainingActivity/startTraining/ic_heart.png"
+				label="心率"
+				:value="heartRate"
+				unit="次/分钟"
+				valueColor="#E53935"
+				labelColor="#E53935"
+				unitColor="#E53935"
+			/>
 			<!-- 心率曲线图（占位） -->
 			<view class="heart-rate-curve">
 				<image 
@@ -151,48 +148,49 @@
 		
 		<!-- 底部力量控制区域 -->
 		<view class="strength-control-section">
-			<!-- 配重标签 -->
-			<view class="weight-label">
-				<view class="weight-badge">KG</view>
-				<text class="weight-text">配重</text>
+			<!-- 顶部行：配重标签左上，力量值右上 -->
+			<view class="control-header">
+				<view class="weight-label">
+					<view class="weight-badge">KG</view>
+					<text class="weight-text">配重</text>
+				</view>
+				<text class="weight-value">{{ displayWeight }}KG</text>
 			</view>
 			
-			<!-- 力量值显示 -->
-			<text class="weight-value">{{ currentWeight }}KG</text>
+			<!-- 开关按钮（居中） -->
+			<view 
+				class="switch-btn" 
+				:class="{ 'switch-on': isPowerOn, 'switch-off': !isPowerOn }"
+				@click="togglePower"
+			>
+				<image 
+					:src="isPowerOn ? '/static/icons/partTrainingActivity/startTraining/ic_switch_on.svg' : '/static/icons/partTrainingActivity/startTraining/ic_switch_off.svg'" 
+					mode="aspectFit"
+					class="switch-icon"
+				/>
+			</view>
 			
-			<!-- 单位切换 -->
-			<text class="unit-label">单位：KG</text>
-			
-			<!-- 力量调节滑块 -->
-			<view class="slider-row">
-				<!-- 电源/暂停按钮 -->
-				<view class="power-btn" @click="togglePower">
-					<image 
-						:src="isPowerOn ? '/static/icons/partTrainingActivity/startTraining/btn-power-on.svg' : '/static/icons/partTrainingActivity/startTraining/btn-power-off.svg'" 
-						mode="aspectFit"
-					/>
-				</view>
-				
+			<!-- 力量调节滑块区域 -->
+			<view class="slider-row" :class="{ 'slider-disabled': !isPowerOn }">
 				<!-- 减少按钮 -->
-				<view class="adjust-btn minus-btn" @click="decreaseWeight">
+				<view class="adjust-btn minus-btn" :class="{ 'btn-disabled': !isPowerOn }" @click="decreaseWeight">
 					<text class="adjust-btn-text">−</text>
 				</view>
 				
-				<!-- 滑块 -->
-				<slider 
-					class="weight-slider"
-					:value="currentWeight" 
-					:min="0" 
-					:max="100"
-					:step="1"
-					activeColor="#4CAF50"
-					backgroundColor="#E0E0E0"
-					block-size="24"
-					@change="onWeightChange"
-				/>
+				<!-- 高性能滑块组件 -->
+				<view class="power-slider-container" :class="{ 'slider-disabled': !isPowerOn }">
+					<PowerSlider
+						v-model="currentWeight"
+						:min="sliderMin"
+						:max="sliderMax"
+						:disabled="!isPowerOn"
+						@dragging="onSliderDragging"
+						@change="onSliderChange"
+					/>
+				</view>
 				
 				<!-- 增加按钮 -->
-				<view class="adjust-btn plus-btn" @click="increaseWeight">
+				<view class="adjust-btn plus-btn" :class="{ 'btn-disabled': !isPowerOn }" @click="increaseWeight">
 					<text class="adjust-btn-text">+</text>
 				</view>
 			</view>
@@ -209,13 +207,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
 import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
+import DataPanel from '@/components/ui-box/data-panel.vue'
+import PowerSlider from '@/components/ui-box/power-slider.vue'
 import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
 import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
+import serialService, { buildD180Frame, FORCE_MODE } from '@/utils/serialService.js'
 
 // ========== 训练数据 ==========
 const currentExerciseName = ref('站姿肩关节环绕')
@@ -232,8 +233,25 @@ const calories = ref(68.88)   // 消耗热量
 const heartRate = ref(33)     // 心率
 
 // ========== 力量控制 ==========
-const currentWeight = ref(50) // 当前配重 KG
-const isPowerOn = ref(true)   // 电源状态
+const currentWeight = ref(30) // 当前配重 KG
+const isPowerOn = ref(false)   // 电源状态（默认关闭）
+
+// 滑块相关常量
+const sliderMin = 5
+const sliderMax = 55
+
+// 拖动时的实时值（用于显示）
+const dragDisplayValue = ref(30)
+const isDraggingSlider = ref(false)
+
+// 显示用的数值：拖动时显示实时值，否则显示 currentWeight
+const displayWeight = computed(() => {
+	return isDraggingSlider.value ? dragDisplayValue.value : currentWeight.value
+})
+
+// ========== 串口通信 ==========
+let lastSendTime = 0
+const SEND_THROTTLE_MS = 1000  // 1Hz 节流
 
 // ========== AI教练信息 ==========
 const selectedCoach = ref(null)
@@ -309,28 +327,48 @@ const handleExitTraining = () => {
 }
 
 // ========== 力量控制方法 ==========
-const onWeightChange = (e) => {
-	currentWeight.value = e.detail.value
+
+// 滑块拖动中回调（用于实时显示数值）
+const onSliderDragging = (value) => {
+	isDraggingSlider.value = true
+	dragDisplayValue.value = value
+}
+
+// 滑块拖动结束回调
+const onSliderChange = (value) => {
+	isDraggingSlider.value = false
+	dragDisplayValue.value = value
+	
+	// 发送力量命令（1Hz 节流）
+	if (isPowerOn.value) {
+		sendForceCommand(value, FORCE_MODE.CONST)
+	}
 }
 
 const increaseWeight = () => {
-	if (currentWeight.value < 100) {
-		currentWeight.value += 5
+	if (!isPowerOn.value) return
+	if (currentWeight.value < sliderMax) {
+		currentWeight.value = Math.min(currentWeight.value + 5, sliderMax)
 	}
 }
 
 const decreaseWeight = () => {
-	if (currentWeight.value > 0) {
-		currentWeight.value -= 5
+	if (!isPowerOn.value) return
+	if (currentWeight.value > sliderMin) {
+		currentWeight.value = Math.max(currentWeight.value - 5, sliderMin)
 	}
 }
 
 const togglePower = () => {
 	isPowerOn.value = !isPowerOn.value
-	uni.showToast({
-		title: isPowerOn.value ? '已开启' : '已暂停',
-		icon: 'none'
-	})
+	
+	if (isPowerOn.value) {
+		// 开启：发送当前力量值 + 恒力模式
+		sendForceCommand(currentWeight.value, FORCE_MODE.CONST)
+	} else {
+		// 关闭：发送 force=5, forceMode=OFF（注意：force=0+mode=0 是紧急停车，不使用）
+		sendForceCommand(5, FORCE_MODE.OFF)
+	}
 }
 
 // ========== 虚拟形象 ==========
@@ -346,6 +384,54 @@ onMounted(() => {
 	selectedCoach.value = getSelectedCoach()
 	console.log('正式训练页 - 当前教练:', selectedCoach.value)
 })
+
+// ========== 串口通信方法 ==========
+/**
+ * 发送力量命令（带 1Hz 节流）
+ * @param {number} force - 力量值 (kg)
+ * @param {number} forceMode - 力量模式
+ */
+const sendForceCommand = async (force, forceMode) => {
+	const now = Date.now()
+	
+	// 1Hz 节流：如果距离上次发送不足 1 秒，跳过（开关操作除外）
+	if (forceMode !== FORCE_MODE.OFF && now - lastSendTime < SEND_THROTTLE_MS) {
+		console.log('[formal-training] 节流跳过，距离上次发送:', now - lastSendTime, 'ms')
+		return
+	}
+	lastSendTime = now
+	
+	// 构建 D180 下行帧
+	const frame = buildD180Frame({
+		force: force,
+		forceMode: forceMode
+	})
+	
+	console.log('[formal-training] 发送力量命令:', {
+		force,
+		forceMode,
+		hex: frame.hex
+	})
+	
+	// 检查连接状态
+	const status = serialService.getStatus()
+	if (!status.isConnected) {
+		console.warn('[formal-training] 串口未连接，无法发送')
+		uni.showToast({
+			title: '设备未连接',
+			icon: 'none'
+		})
+		return
+	}
+	
+	// 发送命令
+	try {
+		await serialService.send(frame.hex)
+		console.log('[formal-training] 发送成功')
+	} catch (err) {
+		console.error('[formal-training] 发送失败:', err)
+	}
+}
 </script>
 
 <style scoped lang="scss">
@@ -425,46 +511,6 @@ onMounted(() => {
 	gap: 16rpx;
 }
 
-.data-panel {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	gap: 12rpx;
-	padding: 16rpx 20rpx;
-	background: rgba(255, 255, 255, 0.9);
-	border-radius: 16rpx;
-	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
-}
-
-.panel-icon-wrap {
-	width: 48rpx;
-	height: 48rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.panel-icon {
-	width: 40rpx;
-	height: 40rpx;
-}
-
-.panel-content {
-	display: flex;
-	flex-direction: column;
-}
-
-.panel-label {
-	font-size: 20rpx;
-	color: #666666;
-}
-
-.panel-value {
-	font-size: 28rpx;
-	font-weight: 700;
-	color: #333333;
-}
-
 /* ========== 虚拟形象缩略图 ========== */
 .virtual-character-container {
 	position: absolute;
@@ -536,36 +582,7 @@ onMounted(() => {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-end;
-}
-
-.heart-rate-display {
-	display: flex;
-	flex-direction: row;
-	align-items: center;
-	gap: 6rpx;
-	margin-bottom: 12rpx;
-}
-
-.heart-icon {
-	width: 28rpx;
-	height: 28rpx;
-}
-
-.heart-label {
-	font-size: 24rpx;
-	color: #E53935;
-	font-weight: 500;
-}
-
-.heart-value {
-	font-size: 28rpx;
-	color: #E53935;
-	font-weight: 700;
-}
-
-.heart-unit {
-	font-size: 20rpx;
-	color: #E53935;
+	gap: 12rpx;
 }
 
 .heart-rate-curve {
@@ -581,53 +598,80 @@ onMounted(() => {
 /* ========== 底部力量控制区域 ========== */
 .strength-control-section {
 	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
+	left: 24rpx;
+	right: 24rpx;
+	bottom: 24rpx;
 	z-index: 100;
-	padding: 24rpx 32rpx 48rpx;
-	background: linear-gradient(180deg, rgba(240, 240, 240, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
-	border-radius: 32rpx 32rpx 0 0;
+	padding: 16rpx 28rpx 20rpx;
+	background: rgba(255, 255, 255, 0.85);
+	border-radius: 24rpx;
+	display: flex;
+	flex-direction: column;
+}
+
+/* 配重标签 */
+.control-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	margin-bottom: 2rpx;
 }
 
 .weight-label {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
-	gap: 12rpx;
-	margin-bottom: 16rpx;
+	gap: 8rpx;
 }
 
 .weight-badge {
-	padding: 6rpx 16rpx;
+	padding: 4rpx 12rpx;
 	background: #333333;
-	border-radius: 8rpx;
-	font-size: 22rpx;
+	border-radius: 6rpx;
+	font-size: 20rpx;
 	color: #FFFFFF;
 	font-weight: 600;
 }
 
 .weight-text {
-	font-size: 28rpx;
+	font-size: 24rpx;
 	color: #333333;
 	font-weight: 500;
 }
 
 .weight-value {
-	display: block;
-	text-align: center;
-	font-size: 56rpx;
+	font-size: 36rpx;
 	font-weight: 700;
 	color: #333333;
-	margin-bottom: 8rpx;
 }
 
-.unit-label {
-	position: absolute;
-	right: 32rpx;
-	top: 24rpx;
-	font-size: 24rpx;
-	color: #666666;
+/* 开关按钮 */
+.switch-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	align-self: center;
+	width: 98rpx;
+	height: 98rpx;
+	background: #FFFFFF;
+	border-radius: 50%;
+	margin-bottom: 48rpx;
+	transition: all 0.3s ease;
+}
+
+.switch-btn.switch-on {
+	box-shadow: 0 6rpx 20rpx rgba(76, 175, 80, 0.5);
+}
+
+.switch-btn.switch-off {
+	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
+}
+
+.switch-icon {
+	width: 68rpx;
+	height: 68rpx;
 }
 
 .slider-row {
@@ -635,29 +679,24 @@ onMounted(() => {
 	flex-direction: row;
 	align-items: center;
 	gap: 16rpx;
-	margin-top: 16rpx;
+	width: 100%;
 }
 
-.power-btn {
-	width: 64rpx;
-	height: 64rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.power-btn image {
-	width: 48rpx;
+/* 自定义滑块 */
+/* PowerSlider 组件容器 */
+.power-slider-container {
+	flex: 1;
 	height: 48rpx;
 }
 
 .adjust-btn {
-	width: 56rpx;
-	height: 56rpx;
-	border-radius: 28rpx;
+	width: 44rpx;
+	height: 44rpx;
+	border-radius: 22rpx;
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	flex-shrink: 0;
 }
 
 .minus-btn {
@@ -669,14 +708,20 @@ onMounted(() => {
 }
 
 .adjust-btn-text {
-	font-size: 40rpx;
+	font-size: 32rpx;
 	color: #FFFFFF;
 	font-weight: 700;
 	line-height: 1;
 }
 
-.weight-slider {
-	flex: 1;
+/* 禁用状态样式 - 配合 PowerSlider 组件 */
+.slider-disabled {
+	opacity: 0.6;
+}
+
+.btn-disabled {
+	background: #CCCCCC !important;
+	opacity: 0.6;
 }
 
 /* ========== 控制面板遮罩层 ========== */

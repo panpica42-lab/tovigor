@@ -1,13 +1,40 @@
 <script>
+import serialService from '@/utils/serialService.js'
+
 export default {
   onLaunch() {
     console.log('App Launch')
+    
+    // 全局串口初始化（仅 App 平台）
+    // #ifdef APP-PLUS
+    this.initSerialConnection()
+    // #endif
   },
   onShow() {
     console.log('App Show')
   },
   onHide() {
     console.log('App Hide')
+  },
+  methods: {
+    // 初始化串口连接
+    async initSerialConnection() {
+      console.log('[App] 正在初始化串口连接...')
+      try {
+        const result = await serialService.connect({
+          path: '/dev/ttyS9',
+          baudRate: 115200
+        })
+        console.log('[App] 串口连接成功:', result)
+      } catch (err) {
+        console.error('[App] 串口连接失败:', err)
+        uni.showToast({
+          title: '设备连接失败，请检查硬件',
+          icon: 'none',
+          duration: 3000
+        })
+      }
+    }
   }
 }
 </script>

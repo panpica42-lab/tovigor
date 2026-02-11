@@ -1,36 +1,36 @@
 <!-- markdownlint-disable -->
 # UTS 串口插件 - 测试指南
 
-## ✅ 已完成工作
+## 已完成工作
 
 ### 1. UTS 插件结构
 ```
 uni_modules/wzl-serialbridge/
-├── package.json          ✅ 插件配置
-├── interface.uts         ✅ TypeScript 接口定义
-├── unierror.uts         ✅ 错误处理
-├── readme.md            ✅ 使用文档
+├── package.json          插件配置
+├── interface.uts         TypeScript 接口定义
+├── unierror.uts         错误处理
+├── readme.md            使用文档
 └── utssdk/
     └── app-android/
-        ├── config.json          ✅ Android 配置
-        ├── index.uts           ✅ Android 实现层
+        ├── config.json          Android 配置
+        ├── index.uts           Android 实现层
         └── libs/
-            └── serialbridge-debug.aar  ✅ 你的 AAR (60KB)
+            └── serialbridge-debug.aar  你的 AAR (60KB)
 ```
 
 ### 2. 代码清理
-- ✅ 删除 `nativeplugins/SerialBridge-Plugin/` 旧插件目录
-- ✅ 删除 `SerialBridge-Studio/` Android Studio 项目
-- ✅ 移除 `manifest.json` 中的 `nativePlugins` 配置
+- 删除 `nativeplugins/SerialBridge-Plugin/` 旧插件目录
+- 删除 `SerialBridge-Studio/` Android Studio 项目
+- 移除 `manifest.json` 中的 `nativePlugins` 配置
 
 ### 3. 测试页面更新
-- ✅ `pages/serial-test/serial-test.vue` 已更新为使用新 UTS 插件
-- ✅ 导入方式: `import { openSerial, ... } from '@/uni_modules/wzl-serialbridge'`
-- ✅ API 调用方式: 回调函数风格 (success/fail/complete)
+- `pages/serial-test/serial-test.vue` 已更新为使用新 UTS 插件
+- 导入方式: `import { openSerial, ... } from '@/uni_modules/wzl-serialbridge'`
+- API 调用方式: 回调函数风格 (success/fail/complete)
 
 ---
 
-## 📱 下一步:制作自定义基座
+## 下一步:制作自定义基座
 
 ### 步骤 1: 打开 HBuilderX
 
@@ -83,7 +83,7 @@ adb install -r unpackage/debug/android_debug.apk
 
 ---
 
-## 🧪 测试功能
+## 测试功能
 
 ### 测试页面入口
 ```
@@ -121,7 +121,7 @@ adb install -r unpackage/debug/android_debug.apk
 
 ---
 
-## 🐛 可能的问题和解决方案
+## 可能的问题和解决方案
 
 ### 问题 1: 制作基座时报错
 **错误**: "云端打包失败"
@@ -168,7 +168,7 @@ adb install -r unpackage/debug/android_debug.apk
 
 ---
 
-## 📊 调试技巧
+## 调试技巧
 
 ### 1. 查看日志
 ```bash
@@ -190,36 +190,36 @@ unzip -l android_debug.apk | grep serialbridge
 
 ---
 
-## 🎉 成功标志
+## 成功标志
 
 如果一切正常,你会看到:
 
-1. ✅ HBuilderX 控制台输出:
+1. HBuilderX 控制台输出:
    ```
    === 串口插件版本: 1.0.0 ===
    === 串口测试页面已挂载 ===
    插件已加载
    ```
 
-2. ✅ 页面显示:
+2. 页面显示:
    - "插件已加载" Toast 提示
    - 所有按钮正常显示
    - 扫描设备能找到设备列表
 
-3. ✅ 功能正常:
+3. 功能正常:
    - 打开串口成功
    - 发送数据成功
    - 接收数据实时显示
 
 ---
 
-## 📝 开发建议
+## 开发建议
 
 ### 当前使用 Debug AAR
-- ✅ 适合开发调试
-- ✅ 可以打断点
-- ⚠️ 体积较大
-- ⚠️ 性能较差
+- 适合开发调试
+- 可以打断点
+- 体积较大
+- 性能较差
 
 ### 发布时使用 Release AAR
 在 Android Studio 中执行:
@@ -231,7 +231,7 @@ unzip -l android_debug.apk | grep serialbridge
 
 ---
 
-## 📞 需要帮助?
+## 需要帮助?
 
 如果遇到问题,请提供:
 1. HBuilderX 版本号
@@ -239,4 +239,4 @@ unzip -l android_debug.apk | grep serialbridge
 3. 设备型号和 Android 版本
 4. 具体的操作步骤
 
-祝测试顺利! 🚀
+祝测试顺利!
