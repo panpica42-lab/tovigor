@@ -2,6 +2,15 @@
  * 正式训练页面
  * 功能：训练过程中的主界面，包含力量控制、数据看板、AI教练指导
  * 结构：全屏背景 + 控制面板 + AI气泡 + 数据看板 + 力量滑块 + 心率曲线
+ * 
+ * 串口通信策略（读发分离，并行运行）：
+ * | 操作场景     | 发送         | 读取         | 说明                      |
+ * |-------------|-------------|-------------|---------------------------|
+ * | 开启开关     | 启动 5Hz 周期 | 启动 50ms 轮询 | startWorking()            |
+ * | 关闭开关     | 停止 + 单次OFF | 停止轮询     | stopWorking() + sendOnce() |
+ * | 滑块拖动中   | -           | -            | 仅更新UI                   |
+ * | 滑块松手     | 更新下次发送值 | -            | updateWorkingForce()      |
+ * | 页面卸载     | 停止 + 单次OFF | 停止轮询     | 安全关闭                   |
  -->
 <template>
 	<view class="formal-training-page">
@@ -173,7 +182,11 @@
 			<!-- 力量调节滑块区域 -->
 			<view class="slider-row" :class="{ 'slider-disabled': !isPowerOn }">
 				<!-- 减少按钮 -->
-				<view class="adjust-btn minus-btn" :class="{ 'btn-disabled': !isPowerOn }" @click="decreaseWeight">
+				<view 
+					class="adjust-btn minus-btn" 
+					:class="{ 'btn-disabled': !isPowerOn || isAtMinLimit }" 
+					@click="decreaseWeight"
+				>
 					<text class="adjust-btn-text">−</text>
 				</view>
 				
@@ -190,7 +203,11 @@
 				</view>
 				
 				<!-- 增加按钮 -->
-				<view class="adjust-btn plus-btn" :class="{ 'btn-disabled': !isPowerOn }" @click="increaseWeight">
+				<view 
+					class="adjust-btn plus-btn" 
+					:class="{ 'btn-disabled': !isPowerOn || isAtMaxLimit }" 
+					@click="increaseWeight"
+				>
 					<text class="adjust-btn-text">+</text>
 				</view>
 			</view>
@@ -216,7 +233,7 @@ import DataPanel from '@/components/ui-box/data-panel.vue'
 import PowerSlider from '@/components/ui-box/power-slider.vue'
 import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
 import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
-import serialService, { buildD180Frame, FORCE_MODE } from '@/utils/serialService.js'
+import serialService, { FORCE_MODE } from '@/utils/serialService.js'
 
 // ========== 训练数据 ==========
 const currentExerciseName = ref('站姿肩关节环绕')
@@ -249,9 +266,9 @@ const displayWeight = computed(() => {
 	return isDraggingSlider.value ? dragDisplayValue.value : currentWeight.value
 })
 
-// ========== 串口通信 ==========
-let lastSendTime = 0
-const SEND_THROTTLE_MS = 1000  // 1Hz 节流
+// 量程上下限判断（用于按钮禁用状态）
+const isAtMinLimit = computed(() => currentWeight.value <= sliderMin)
+const isAtMaxLimit = computed(() => currentWeight.value >= sliderMax)
 
 // ========== AI教练信息 ==========
 const selectedCoach = ref(null)
@@ -339,35 +356,40 @@ const onSliderChange = (value) => {
 	isDraggingSlider.value = false
 	dragDisplayValue.value = value
 	
-	// 发送力量命令（1Hz 节流）
+	// 更新工作力量值（如果在工作状态）
 	if (isPowerOn.value) {
-		sendForceCommand(value, FORCE_MODE.CONST)
+		serialService.updateWorkingForce(value)
 	}
 }
 
 const increaseWeight = () => {
 	if (!isPowerOn.value) return
-	if (currentWeight.value < sliderMax) {
-		currentWeight.value = Math.min(currentWeight.value + 5, sliderMax)
-	}
+	if (currentWeight.value >= sliderMax) return  // 已到上限
+	
+	currentWeight.value = Math.min(currentWeight.value + 1, sliderMax)
+	// 更新工作力量值
+	serialService.updateWorkingForce(currentWeight.value)
 }
 
 const decreaseWeight = () => {
 	if (!isPowerOn.value) return
-	if (currentWeight.value > sliderMin) {
-		currentWeight.value = Math.max(currentWeight.value - 5, sliderMin)
-	}
+	if (currentWeight.value <= sliderMin) return  // 已到下限
+	
+	currentWeight.value = Math.max(currentWeight.value - 1, sliderMin)
+	// 更新工作力量值
+	serialService.updateWorkingForce(currentWeight.value)
 }
 
 const togglePower = () => {
 	isPowerOn.value = !isPowerOn.value
 	
 	if (isPowerOn.value) {
-		// 开启：发送当前力量值 + 恒力模式
-		sendForceCommand(currentWeight.value, FORCE_MODE.CONST)
+		// 开启：启动工作状态（周期发送 + 轮询读取）
+		serialService.startWorking(currentWeight.value, FORCE_MODE.CONST, 200)  // 5Hz
 	} else {
-		// 关闭：发送 force=5, forceMode=OFF（注意：force=0+mode=0 是紧急停车，不使用）
-		sendForceCommand(5, FORCE_MODE.OFF)
+		// 关闭：停止工作状态，发送关闭命令
+		serialService.stopWorking()
+		serialService.sendOnce(5, FORCE_MODE.OFF)  // force=5, mode=OFF
 	}
 }
 
@@ -385,53 +407,14 @@ onMounted(() => {
 	console.log('正式训练页 - 当前教练:', selectedCoach.value)
 })
 
-// ========== 串口通信方法 ==========
-/**
- * 发送力量命令（带 1Hz 节流）
- * @param {number} force - 力量值 (kg)
- * @param {number} forceMode - 力量模式
- */
-const sendForceCommand = async (force, forceMode) => {
-	const now = Date.now()
-	
-	// 1Hz 节流：如果距离上次发送不足 1 秒，跳过（开关操作除外）
-	if (forceMode !== FORCE_MODE.OFF && now - lastSendTime < SEND_THROTTLE_MS) {
-		console.log('[formal-training] 节流跳过，距离上次发送:', now - lastSendTime, 'ms')
-		return
+onBeforeUnmount(() => {
+	console.log('正式训练页 - 页面卸载，清理资源')
+	// 确保停止工作状态
+	if (isPowerOn.value) {
+		serialService.stopWorking()
+		serialService.sendOnce(5, FORCE_MODE.OFF)  // 安全关闭
 	}
-	lastSendTime = now
-	
-	// 构建 D180 下行帧
-	const frame = buildD180Frame({
-		force: force,
-		forceMode: forceMode
-	})
-	
-	console.log('[formal-training] 发送力量命令:', {
-		force,
-		forceMode,
-		hex: frame.hex
-	})
-	
-	// 检查连接状态
-	const status = serialService.getStatus()
-	if (!status.isConnected) {
-		console.warn('[formal-training] 串口未连接，无法发送')
-		uni.showToast({
-			title: '设备未连接',
-			icon: 'none'
-		})
-		return
-	}
-	
-	// 发送命令
-	try {
-		await serialService.send(frame.hex)
-		console.log('[formal-training] 发送成功')
-	} catch (err) {
-		console.error('[formal-training] 发送失败:', err)
-	}
-}
+})
 </script>
 
 <style scoped lang="scss">

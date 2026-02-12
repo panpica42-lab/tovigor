@@ -311,8 +311,8 @@ export function connect(options = {}) {
         
         console.log('[serialService] 连接成功, portId:', portId)
         
-        // 启动轮询
-        startPolling()
+        // 注意：不在连接时自动启动轮询
+        // 轮询由业务层通过 startWorking() 控制
         
         emit('connect', { 
           portId, 
@@ -823,6 +823,113 @@ export function scanDevices(prefixes = ['/dev/ttyS', '/dev/ttyUSB', '/dev/ttyAMA
 }
 
 // ============================================================================
+// 工作状态控制（发送+读取并行）
+// ============================================================================
+
+let sendTimer = null
+let workingForce = 0
+let workingMode = 0
+
+/**
+ * 启动工作状态（周期发送 + 轮询读取）
+ * @param {number} force - 力量值 (kg)
+ * @param {number} forceMode - 力量模式
+ * @param {number} sendInterval - 发送间隔，默认 200ms (5Hz)
+ */
+export function startWorking(force, forceMode, sendInterval = 200) {
+  // 先停止之前的
+  stopWorking()
+  
+  workingForce = force
+  workingMode = forceMode
+  
+  console.log('[serialService] 启动工作状态, force:', force, 'mode:', forceMode, 'interval:', sendInterval)
+  
+  // 启动发送定时器
+  sendTimer = setInterval(() => {
+    if (!isConnected || portId === 0) {
+      console.warn('[serialService] 发送跳过：未连接')
+      return
+    }
+    
+    const frame = buildD180Frame({
+      force: workingForce,
+      forceMode: workingMode
+    })
+    
+    // 不等待，直接发送
+    writeSerial({
+      portId,
+      data: frame.hex,
+      format: 'hex',
+      timeout: 100,
+      success: () => {},
+      fail: (err) => {
+        console.error('[serialService] 周期发送失败:', err)
+      }
+    })
+  }, sendInterval)
+  
+  // 启动轮询读取
+  startPolling()
+}
+
+/**
+ * 停止工作状态
+ */
+export function stopWorking() {
+  if (sendTimer) {
+    clearInterval(sendTimer)
+    sendTimer = null
+    console.log('[serialService] 发送定时器已停止')
+  }
+  stopPolling()
+}
+
+/**
+ * 更新工作力量值（不重启定时器）
+ * @param {number} force - 新的力量值
+ */
+export function updateWorkingForce(force) {
+  workingForce = force
+  console.log('[serialService] 更新工作力量:', force)
+}
+
+/**
+ * 发送单次命令（用于关闭等场景）
+ * @param {number} force - 力量值
+ * @param {number} forceMode - 力量模式
+ */
+export function sendOnce(force, forceMode) {
+  if (!isConnected || portId === 0) {
+    console.warn('[serialService] 单次发送跳过：未连接')
+    return
+  }
+  
+  const frame = buildD180Frame({ force, forceMode })
+  
+  console.log('[serialService] 单次发送:', { force, forceMode, hex: frame.hex })
+  
+  writeSerial({
+    portId,
+    data: frame.hex,
+    format: 'hex',
+    timeout: 100,
+    success: () => {},
+    fail: (err) => {
+      console.error('[serialService] 单次发送失败:', err)
+    }
+  })
+}
+
+/**
+ * 查询是否在工作状态
+ */
+export function isWorking() {
+  return sendTimer !== null
+}
+
+// ============================================================================
 // 应用生命周期
 // ============================================================================
 
@@ -832,7 +939,7 @@ export function scanDevices(prefixes = ['/dev/ttyS', '/dev/ttyUSB', '/dev/ttyAMA
 export function cleanup() {
   console.log('[serialService] 清理资源...')
   
-  stopPolling()
+  stopWorking()  // 停止工作状态（包含 stopPolling）
   
   if (isConnected && portId > 0) {
     closeSerial({
@@ -864,6 +971,13 @@ export default {
   // 连接管理
   connect,
   disconnect,
+  
+  // 工作状态控制
+  startWorking,
+  stopWorking,
+  updateWorkingForce,
+  sendOnce,
+  isWorking,
   
   // 数据传输
   send,
