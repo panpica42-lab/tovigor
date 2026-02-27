@@ -3,16 +3,64 @@
 		<!-- 顶部标题区域 -->
 		<view class="header">
 			<view class="header-title">
-				<image 
-					class="usage-guide-btn" 
-					src="/static/icons/homeActivity/btn_usage_guide.svg" 
-					mode="aspectFit"
-					@click="showUsageGuide"
-				></image>
 				<text class="title-main">HI,Tovigor</text>
+				<view class="header-right">
+					<!-- 控制小面板 -->
+					<view class="control-panel">
+						<image 
+							class="control-icon" 
+							:class="{ active: controlStates.light }"
+							src="/static/icons/homeActivity/ic_control_light.svg" 
+							mode="aspectFit"
+							@click="toggleControl('light')"
+						></image>
+						<image 
+							class="control-icon" 
+							:class="{ active: controlStates.wifi }"
+							src="/static/icons/homeActivity/ic_control_wifi.svg" 
+							mode="aspectFit"
+							@click="toggleControl('wifi')"
+						></image>
+						<image 
+							class="control-icon" 
+							:class="{ active: controlStates.voice }"
+							src="/static/icons/homeActivity/ic_control_voice.svg" 
+							mode="aspectFit"
+							@click="toggleControl('voice')"
+						></image>
+						<image 
+							class="control-icon" 
+							:class="{ active: controlStates.bluetooth }"
+							src="/static/icons/homeActivity/ic_control_bluetooth.svg" 
+							mode="aspectFit"
+							@click="toggleControl('bluetooth')"
+						></image>
+						<image 
+							class="control-icon" 
+							:class="{ active: controlStates.setting }"
+							src="/static/icons/homeActivity/ic_setting_system.svg" 
+							mode="aspectFit"
+							@click="toggleControl('setting')"
+						></image>
+						<image 
+							class="control-icon" 
+							:class="{ active: controlStates.power }"
+							src="/static/icons/homeActivity/ic_control_on-off.svg" 
+							mode="aspectFit"
+							@click="toggleControl('power')"
+						></image>
+					</view>
+					<!-- 使用指南按钮 -->
+					<image 
+						class="usage-guide-btn" 
+						src="/static/icons/homeActivity/btn_usage_guide.svg" 
+						mode="aspectFit"
+						@click="showUsageGuide"
+					></image>
+				</view>
 				<!-- <image class="title-icon" src="/static/icons/homeActivity/trimming.png" mode="aspectFill"></image> -->
 			</view>
-			<text class="title-sub">1234Tovigor的健身世界，活力一触即发！</text>
+			<text class="title-sub">Tovigor的健身世界，活力一触即发！</text>
 		</view>
 
 		<!-- 功能卡片区域 -->
@@ -165,6 +213,20 @@ const showUsageGuide = () => {
 	showGuideModal.value = true
 }
 
+// 控制面板状态
+const controlStates = ref({
+	light: false,
+	wifi: false,
+	voice: false,
+	bluetooth: false,
+	setting: false,
+	power: false
+})
+
+const toggleControl = (key) => {
+	controlStates.value[key] = !controlStates.value[key]
+}
+
 const calcScrollHeight = () => {
 	const { windowHeight } = uni.getSystemInfoSync()
 	const instance = getCurrentInstance()
@@ -259,23 +321,62 @@ page {
 	display: flex;
 	flex-direction: row;
 	align-items: center;
+	justify-content: space-between;
 	margin-bottom: 10rpx;
-	position: relative;
+}
+
+.header-right {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 16rpx;
+}
+
+/* 控制小面板 */
+.control-panel {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 48rpx;
+	padding: 0 12rpx;
+	background: linear-gradient(180deg, #FFFFFF 0%, #F0F0F0 100%);
+	border-radius: 8rpx;
+	box-shadow: 
+		0 2rpx 8rpx rgba(0, 0, 0, 0.1),
+		0 1rpx 2rpx rgba(0, 0, 0, 0.06),
+		inset 0 1rpx 0 rgba(255, 255, 255, 0.8),
+		inset 0 -1rpx 0 rgba(0, 0, 0, 0.05);
+	gap: 12rpx;
+}
+
+.control-icon {
+	width: 28rpx;
+	height: 28rpx;
+	opacity: 0.4;
+	transition: all 0.2s;
+	filter: grayscale(100%) brightness(0.5);
+}
+
+.control-icon.active {
+	opacity: 1;
+	filter: none;
+	/* 绿色滤镜效果 */
+	filter: brightness(0) saturate(100%) invert(56%) sepia(74%) saturate(459%) hue-rotate(93deg) brightness(95%) contrast(89%);
+}
+
+.control-icon:active {
+	transform: scale(0.9);
 }
 
 .usage-guide-btn {
-	position: absolute;  /* 绝对定位 - 脱离正常文档流 */
-	left: 0;              /* 距离父容器左边距离为0 */
-	top: 0;               /* 距离父容器顶部距离为0 */
-	transform: translateY(-50%);       /* 垂直方向上向上移动自身高度的50% */
-	width: 48rpx; 	       /* 宽度48rpx */
-	height: 48rpx;        /* 高度48rpx */
-	transition: all 0.2s;  /* 所有属性变化都有0.2秒的过渡动画 */
+	width: 48rpx;
+	height: 48rpx;
+	transition: all 0.2s;
 }
 
 .usage-guide-btn:active {
-	opacity: 0.7;        /* 点击时透明度降低 */
-	transform: translateY(-50%) scale(0.95); /* 同时缩小至95% */
+	opacity: 0.7;
+	transform: scale(0.95);
 }
 
 .title-main {

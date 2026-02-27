@@ -11,7 +11,8 @@
 		{
 			"path": "pages/index/index",
 			"style": {
-				"navigationBarTitleText": "Tovigor健身",
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
 				"bounce": "none",
 				"scrollIndicator": "none"
 			}
@@ -87,14 +88,32 @@
 			}
 		},
 		{
-			"path": "pages/smartAssess/strength-assess",
+			"path": "pages/smartAssess/body-strength-assess/body-strength-assess",
 			"style": {
 				"navigationBarTitleText": "",
 				"navigationStyle": "custom"
 			}
 		},
 		{
-			"path": "pages/smartAssess/body-function-assess",
+			"path": "pages/smartAssess/body-strength-assess/body-strength-assess-new",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-function-assess/body-function-assess",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-posture-assess/body-posture-assess",
 			"style": {
 				"navigationBarTitleText": "",
 				"navigationStyle": "custom",

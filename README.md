@@ -16,7 +16,7 @@
 tovigor_v1/
 ├── pages/                        # 页面目录
 │   ├── idle/                     # 待机页（应用入口）
-│   ├── index/                    # 首页（卡片式导航）
+│   ├── index/                    # 首页（卡片式导航 + 控制面板）
 │   ├── freeTraining/             # 自由训练（力量旋钮控制）
 │   ├── partTraining/             # 部位训练模块
 │   │   ├── part-training.vue         # 部位选择
@@ -30,9 +30,16 @@ tovigor_v1/
 │   │       ├── course-detail.vue          # 课程详情
 │   │       └── training-filter-sidebar.vue # 筛选侧边栏
 │   ├── smartAssess/              # 智能评估模块
-│   │   ├── first-skip.vue            # 首次跳过引导
-│   │   ├── strength-assess.vue       # 力量评估
-│   │   └── body-function-assess.vue  # 身体功能评估
+│   │   ├── first-skip.vue            # 评估入口（三大评估选择）
+│   │   ├── body-function-assess/     # 身体机能评估
+│   │   │   └── body-function-assess.vue
+│   │   ├── body-strength-assess/     # 部位力量评估
+│   │   │   ├── body-strength-assess-new.vue  # 评估入口页
+│   │   │   ├── body-strength-assess.vue      # 旧版（代码资源库）
+│   │   │   └── components/
+│   │   │       └── body-part-card.vue        # 部位卡片组件
+│   │   └── body-posture-assess/      # 体态姿势评估
+│   │       └── body-posture-assess.vue
 │   └── serial-test/              # 串口调试工具
 ├── components/                   # 全局公共组件
 │   ├── modals/                       # 弹窗组件
@@ -42,9 +49,14 @@ tovigor_v1/
 │   ├── wzl-serialbridge/             # 串口通信 UTS 插件
 │   └── qiun-data-charts/             # 图表组件库
 ├── utils/                        # 工具函数
-│   └── coachManager.js               # AI教练管理器
+│   ├── coachManager.js               # AI教练管理器
+│   └── serialService.js              # 串口通信服务
 ├── static/                       # 静态资源
 │   └── icons/                        # 图标资源
+├── docs/                         # 项目文档
+│   ├── 开发日志/                     # 开发日志
+│   ├── 通信模块/                     # 串口通信文档
+│   └── 其他/                         # 其他文档
 ├── manifest.json                 # 应用配置
 ├── pages.json                    # 页面路由配置
 └── uni.scss                      # 全局样式变量
@@ -100,9 +112,11 @@ ModalContainerLight（极简容器）
 | `/pages/partTraining/formal-training` | 正式训练 |
 | `/pages/partTraining/cool-down-page` | 拉伸放松 |
 | `/pages/smartAssess/first-skip` | 智能评估入口 |
-| `/pages/smartAssess/strength-assess` | 力量评估 |
-| `/pages/smartAssess/body-function-assess` | 身体功能评估 |
-| `/pages/serial-test/serial-test` | 串口调试工具 |
+| `/pages/smartAssess/body-function-assess/body-function-assess` | 身体机能评估 |
+| `/pages/smartAssess/body-strength-assess/body-strength-assess-new` | 部位力量评估 |
+| `/pages/smartAssess/body-posture-assess/body-posture-assess` | 体态姿势评估 |
+| `/pages/serial-test/serial-test` | 串口调试工具 v1 |
+| `/pages/serial-test/serial-test-v2` | 串口调试工具 v2 |
 
 ## 串口通信插件
 

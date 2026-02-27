@@ -55,23 +55,21 @@
 // 跳转到身体机能评估
 const goToSkillAssess = () => {
 	uni.navigateTo({
-		url: '/pages/smartAssess/body-function-assess'
+		url: '/pages/smartAssess/body-function-assess/body-function-assess'
 	})
 }
 
 // 跳转到体态姿势评估
 const goToPostureAssess = () => {
-	uni.showToast({
-		title: '体态姿势评估',
-		icon: 'none'
+	uni.navigateTo({
+		url: '/pages/smartAssess/body-posture-assess/body-posture-assess'
 	})
-	// TODO: 跳转到具体评估页面
 }
 
 // 跳转到部位力量评估
 const goToStrengthAssess = () => {
 	uni.navigateTo({
-		url: '/pages/smartAssess/strength-assess'
+		url: '/pages/smartAssess/body-strength-assess/body-strength-assess-new'
 	})
 }
 </script>
