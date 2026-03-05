@@ -17,60 +17,59 @@
 		<view class="content">
 			<!-- 人体模型区域 -->
 			<view class="body-model-area">
+				<!-- 临时按钮：查看旧版 -->
+				<view class="temp-btn" @click="goToOldVersion">
+					<text class="temp-btn-text">旧版</text>
+				</view>
+				
 				<!-- 人体图片 -->
 				<image 
 					class="body-image" 
-					src="/static/icons/smartAssessActivity/li-liang/bg_body.jpg" 
+					src="/static/icons/smartAssessActivity/li-liang/bg_body.png" 
 					mode="aspectFit"
 				/>
 				
-				<!-- 左侧部位卡片 -->
+				<!-- 左侧部位卡片：背、臂、腿 -->
 				<view class="cards-left">
-					<BodyPartCard 
-						name="肩部" 
-						:weight="partsData.shoulder.weight"
-						:sub-items="partsData.shoulder.subItems"
-						position="left"
-						class="card-shoulder"
-					/>
 					<BodyPartCard 
 						name="背部" 
 						:weight="partsData.back.weight"
 						:sub-items="partsData.back.subItems"
 						position="left"
-						class="card-back"
 					/>
 					<BodyPartCard 
 						name="手臂" 
 						:weight="partsData.arm.weight"
 						:sub-items="partsData.arm.subItems"
 						position="left"
-						class="card-arm"
 					/>
 					<BodyPartCard 
 						name="腿部" 
 						:weight="partsData.leg.weight"
 						:sub-items="partsData.leg.subItems"
 						position="left"
-						class="card-leg"
 					/>
 				</view>
 				
-				<!-- 右侧部位卡片 -->
+				<!-- 右侧部位卡片：肩、胸、臀 -->
 				<view class="cards-right">
+					<BodyPartCard 
+						name="肩部" 
+						:weight="partsData.shoulder.weight"
+						:sub-items="partsData.shoulder.subItems"
+						position="right"
+					/>
 					<BodyPartCard 
 						name="胸部" 
 						:weight="partsData.chest.weight"
 						:sub-items="partsData.chest.subItems"
 						position="right"
-						class="card-chest"
 					/>
 					<BodyPartCard 
 						name="臀部" 
 						:weight="partsData.hip.weight"
 						:sub-items="partsData.hip.subItems"
 						position="right"
-						class="card-hip"
 					/>
 				</view>
 			</view>
@@ -160,10 +159,15 @@ const partsData = reactive({
 // 开始评估
 const handleStartAssess = () => {
 	console.log('开始力量评估')
-	// TODO: 跳转到评估流程页面
-	uni.showToast({
-		title: '开始评估',
-		icon: 'none'
+	uni.navigateTo({
+		url: '/pages/smartAssess/body-strength-assess/strength-assess'
+	})
+}
+
+// 临时：跳转到旧版页面
+const goToOldVersion = () => {
+	uni.navigateTo({
+		url: '/pages/smartAssess/body-strength-assess/strength-display-old'
 	})
 }
 </script>
@@ -216,37 +220,35 @@ const handleStartAssess = () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 20rpx;
 }
 
 .body-image {
-	width: 400rpx;
-	height: 100%;
-	max-height: 800rpx;
+	width: 500rpx;
+	height: 900rpx;
 }
 
-/* 左侧卡片容器 */
+/* 左侧卡片容器：背、臂、腿 - 向下偏移实现交错 */
 .cards-left {
 	position: absolute;
-	left: 20rpx;
+	left: 10rpx;
 	top: 0;
 	bottom: 0;
 	display: flex;
 	flex-direction: column;
 	justify-content: space-around;
-	padding: 40rpx 0;
+	padding: 100rpx 0 60rpx;
 }
 
-/* 右侧卡片容器 */
+/* 右侧卡片容器：肩、胸、臀 - 向上偏移实现交错 */
 .cards-right {
 	position: absolute;
-	right: 20rpx;
+	right: 10rpx;
 	top: 0;
 	bottom: 0;
 	display: flex;
 	flex-direction: column;
 	justify-content: space-around;
-	padding: 120rpx 0;
+	padding: 40rpx 0 120rpx;
 }
 
 /* ========== 底部区域 ========== */
@@ -292,6 +294,22 @@ const handleStartAssess = () => {
 .start-btn-text {
 	font-size: 32rpx;
 	font-weight: 600;
+	color: #FFFFFF;
+}
+
+/* 临时按钮 - 绝对定位右上角 */
+.temp-btn {
+	position: absolute;
+	top: 10rpx;
+	right: 10rpx;
+	z-index: 100;
+	padding: 10rpx 20rpx;
+	background: rgba(0, 0, 0, 0.5);
+	border-radius: 6rpx;
+}
+
+.temp-btn-text {
+	font-size: 20rpx;
 	color: #FFFFFF;
 }
 </style>

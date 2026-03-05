@@ -71,38 +71,43 @@ const formatSubValue = (value) => {
 	display: flex;
 	flex-direction: column;
 	background: rgba(255, 255, 255, 0.95);
-	border-radius: 12rpx;
-	padding: 16rpx 20rpx;
-	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
-	min-width: 180rpx;
+	border-radius: 10rpx;
+	padding: 10rpx 14rpx;
+	box-shadow: 0 3rpx 12rpx rgba(0, 0, 0, 0.08);
+	min-width: 150rpx;
+	transform: scale(0.85);
+	transform-origin: center center;
 }
 
 /* 左侧卡片 - 左对齐 */
 .part-card.position-left {
 	align-items: flex-start;
+	transform-origin: left center;
 }
 
 /* 右侧卡片 - 右对齐 */
 .part-card.position-right {
 	align-items: flex-end;
+	transform-origin: right center;
 }
 
 .main-row {
 	display: flex;
 	flex-direction: row;
 	align-items: baseline;
-	gap: 12rpx;
-	margin-bottom: 8rpx;
+	justify-content: space-between;
+	width: 100%;
+	margin-bottom: 6rpx;
 }
 
 .part-name {
-	font-size: 28rpx;
+	font-size: 24rpx;
 	font-weight: 600;
 	color: #333333;
 }
 
 .part-weight {
-	font-size: 28rpx;
+	font-size: 24rpx;
 	font-weight: bold;
 	color: #4CAF50;
 }
@@ -110,7 +115,7 @@ const formatSubValue = (value) => {
 .sub-items {
 	display: flex;
 	flex-direction: row;
-	gap: 16rpx;
+	gap: 12rpx;
 }
 
 .sub-item {
@@ -121,12 +126,12 @@ const formatSubValue = (value) => {
 }
 
 .sub-label {
-	font-size: 20rpx;
+	font-size: 18rpx;
 	color: #999999;
 }
 
 .sub-value {
-	font-size: 20rpx;
+	font-size: 18rpx;
 	color: #666666;
 }
 </style>

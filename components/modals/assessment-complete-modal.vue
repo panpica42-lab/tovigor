@@ -5,8 +5,10 @@
  -->
 <template>
 	<view v-if="visible" class="modal-overlay" @click="handleOverlayClick">
-		<view class="modal-card" @click.stop>
-			<!-- 上半部分：绿色区域 -->
+		<!-- 包装器：垂直排列弹窗卡片 + 关闭按钮 -->
+		<view class="modal-wrapper" @click.stop>
+			<view class="modal-card">
+				<!-- 上半部分：绿色区域 -->
 			<view class="modal-header">
 				<!-- 顶部胶囊把手 -->
 				<view class="handle-bar"></view>
@@ -35,19 +37,29 @@
 				<text class="subtitle-text">{{ countdown }}S后自动跳转{{ nextPartName }}评估</text>
 			</view>
 			
-			<!-- 下半部分：白色区域 - 按钮组 -->
-			<view class="modal-footer">
-				<view class="btn-group">
-					<!-- 主按钮：直接开始 -->
-					<view class="btn btn-primary" @click="handleStart">
-						<text class="btn-text btn-primary-text">直接开始</text>
-					</view>
-					
-					<!-- 次按钮：取消 -->
-					<view class="btn btn-secondary" @click="handleCancel">
-						<text class="btn-text btn-secondary-text">取消</text>
+				<!-- 下半部分：白色区域 - 按钮组 -->
+				<view class="modal-footer">
+					<view class="btn-group">
+						<!-- 主按钮：直接开始 -->
+						<view class="btn btn-primary" @click="handleStart">
+							<text class="btn-text btn-primary-text">直接开始</text>
+						</view>
+						
+						<!-- 次按钮：取消 -->
+						<view class="btn btn-secondary" @click="handleCancel">
+							<text class="btn-text btn-secondary-text">取消</text>
+						</view>
 					</view>
 				</view>
+			</view>
+			
+			<!-- 游离关闭按钮（在卡片下方） -->
+			<view class="floating-close-btn" @click="handleCancel">
+				<image 
+					class="close-icon" 
+					src="/static/icons/general/btn_general_close.svg" 
+					mode="aspectFit"
+				/>
 			</view>
 		</view>
 	</view>
@@ -203,10 +215,19 @@ onUnmounted(() => {
 	padding: 60rpx;
 }
 
+/* ========== 弹窗包装器（垂直排列卡片+关闭按钮） ========== */
+.modal-wrapper {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 40rpx;
+	width: 100%;
+	max-width: 600rpx;
+}
+
 /* ========== 弹窗卡片 ========== */
 .modal-card {
 	width: 100%;
-	max-width: 600rpx;
 	background: #FFFFFF;
 	border-radius: 32rpx;
 	overflow: hidden;
@@ -312,5 +333,28 @@ onUnmounted(() => {
 
 .btn-secondary-text {
 	color: #666666;
+}
+
+/* ========== 游离关闭按钮 ========== */
+.floating-close-btn {
+	width: 72rpx;
+	height: 72rpx;
+	border-radius: 50%;
+	border: 4rpx solid rgba(255, 255, 255, 0.6);
+	background: transparent;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.3s;
+}
+
+.floating-close-btn:active {
+	transform: scale(0.9);
+	border-color: rgba(255, 255, 255, 0.9);
+}
+
+.close-icon {
+	width: 48rpx;
+	height: 48rpx;
 }
 </style>

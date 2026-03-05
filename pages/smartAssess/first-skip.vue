@@ -69,7 +69,7 @@ const goToPostureAssess = () => {
 // 跳转到部位力量评估
 const goToStrengthAssess = () => {
 	uni.navigateTo({
-		url: '/pages/smartAssess/body-strength-assess/body-strength-assess-new'
+		url: '/pages/smartAssess/body-strength-assess/strength-overview'
 	})
 }
 </script>

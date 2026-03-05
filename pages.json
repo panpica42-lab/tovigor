@@ -18,6 +18,24 @@
 			}
 		},
 		{
+			"path": "pages/freeTraining/free-training-intro",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
+			"path": "pages/freeTraining/action-library",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
 			"path": "pages/freeTraining/free-training",
 			"style": {
 				"navigationBarTitleText": "自由训练",
@@ -88,19 +106,26 @@
 			}
 		},
 		{
-			"path": "pages/smartAssess/body-strength-assess/body-strength-assess",
+			"path": "pages/smartAssess/body-strength-assess/strength-display-old",
 			"style": {
 				"navigationBarTitleText": "",
 				"navigationStyle": "custom"
 			}
 		},
 		{
-			"path": "pages/smartAssess/body-strength-assess/body-strength-assess-new",
+			"path": "pages/smartAssess/body-strength-assess/strength-overview",
 			"style": {
 				"navigationBarTitleText": "",
 				"navigationStyle": "custom",
 				"disableScroll": true,
 				"bounce": "none"
+			}
+		},
+		{
+			"path": "pages/smartAssess/body-strength-assess/strength-assess",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom"
 			}
 		},
 		{

@@ -245,10 +245,10 @@ const calcScrollHeight = () => {
 	})
 }
 
-// 跳转到自由训练页面
+// 跳转到自由训练页面（先跳转到前置介绍页）
 const goToFreeTraining = () => {
 	uni.navigateTo({
-		url: '/pages/freeTraining/free-training'
+		url: '/pages/freeTraining/free-training-intro'
 	})
 }
 

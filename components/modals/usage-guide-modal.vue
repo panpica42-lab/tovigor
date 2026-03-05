@@ -7,9 +7,6 @@
 	<ModalContainer 
 		:visible="visible"
 		@update:visible="$emit('update:visible', $event)"
-		position="center"
-		animation="fade"
-		:overlay-opacity="0.5"
 		:width="690"
 		:border-radius="32"
 		:close-on-click-overlay="false"

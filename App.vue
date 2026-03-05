@@ -1,13 +1,20 @@
 <script>
 import serialService from '@/utils/serialService.js'
 
+// ========== 调试开关 ==========
+const DEBUG_MODE = false  // true: 禁用串口连接，false: 启用串口连接
+
 export default {
   onLaunch() {
     console.log('App Launch')
     
     // 全局串口初始化（仅 App 平台）
     // #ifdef APP-PLUS
-    this.initSerialConnection()
+    if (!DEBUG_MODE) {
+      this.initSerialConnection()
+    } else {
+      console.log('[App] 调试模式，跳过串口连接')
+    }
     // #endif
   },
   onShow() {
