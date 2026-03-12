@@ -9,6 +9,15 @@
 			}
 		},
 		{
+			"path": "pages/games/flappyBird/flappy-bird",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
 			"path": "pages/index/index",
 			"style": {
 				"navigationBarTitleText": "",
@@ -38,7 +47,8 @@
 		{
 			"path": "pages/freeTraining/free-training",
 			"style": {
-				"navigationBarTitleText": "自由训练",
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
 				"disableScroll": true,
 				"bounce": "none"
 			}

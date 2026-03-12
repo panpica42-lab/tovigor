@@ -190,7 +190,7 @@ const handleFilterChange = (data) => {
 	background-color: #F5F5F5;
 	display: flex;
 	flex-direction: column;
-	padding: 4rpx 16rpx 0;
+	padding: 4rpx 28rpx 0 16rpx;
 	overflow: hidden ;
 }
 
@@ -220,7 +220,7 @@ const handleFilterChange = (data) => {
 	display: flex;
 	flex-direction: row;
 	flex: 1;   // 填满 header 下方所有空间
-	gap: 14rpx;
+	gap: 24rpx;
 	overflow: hidden; // 建议加上，避免横向多余滚动
 }
 

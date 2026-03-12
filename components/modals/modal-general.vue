@@ -2,6 +2,9 @@
 <template>
   <view v-if="show" class="modal-mask" @touchmove.stop.prevent @click="handleMaskClick">
     <view class="modal-box" @click.stop>
+      <!-- 顶部装饰横条 -->
+      <view class="modal-decoration-bar"></view>
+      
       <!-- 标题 -->
       <view v-if="title" class="modal-title">
         <text>{{ title }}</text>
@@ -101,13 +104,27 @@ export default {
 }
 
 .modal-box {
+  position: relative;
   width: 100%;
   max-width: 600rpx;
-  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  background: linear-gradient(180deg, #E8910C 0%, #F5B041 35%, #FCDC97 70%, #FFF8E7 100%);
   border-radius: 32rpx;
-  padding: 50rpx 40rpx 40rpx;
+  padding: 60rpx 40rpx 40rpx;
   box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);
   animation: modalSlideIn 0.3s ease-out;
+  overflow: hidden;
+}
+
+/* 顶部装饰横条 */
+.modal-decoration-bar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120rpx;
+  height: 10rpx;
+  background: linear-gradient(90deg, #8D6E63, #6D4C41, #8D6E63);
+  border-radius: 0 0 10rpx 10rpx;
 }
 
 @keyframes modalSlideIn {

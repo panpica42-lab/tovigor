@@ -887,6 +887,23 @@ export function stopWorking() {
 }
 
 /**
+ * 启动读取（仅轮询，不发送）- 供测试页面使用
+ * 注意：正常业务页面应使用 startWorking()
+ */
+export function startReading() {
+  console.log('[serialService] 启动纯读取模式')
+  startPolling()
+}
+
+/**
+ * 停止读取 - 供测试页面使用
+ */
+export function stopReading() {
+  console.log('[serialService] 停止纯读取模式')
+  stopPolling()
+}
+
+/**
  * 更新工作力量值（不重启定时器）
  * @param {number} force - 新的力量值
  */
@@ -978,6 +995,10 @@ export default {
   updateWorkingForce,
   sendOnce,
   isWorking,
+  
+  // 纯读取（测试用）
+  startReading,
+  stopReading,
   
   // 数据传输
   send,

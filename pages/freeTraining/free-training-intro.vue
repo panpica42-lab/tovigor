@@ -49,37 +49,43 @@
 <script setup>
 import { ref } from 'vue'
 
-// 训练模式数据
+// 训练模式数据（恒力排在最前面）
 const trainingModes = ref([
 	{
+		key: 'hengli',
+		title: '恒力模式',
+		description: '阻力大小恒定，贴近日常生活和工作',
+		icon: '/static/icons/freeTrainingActivity/ic_force_hengli.png'
+	},
+	{
+		key: 'xiangxin',
 		title: '向心等张模式',
 		description: '增肌、减脂、塑性、适合游泳、跑步、滑冰等项目',
 		icon: '/static/icons/freeTrainingActivity/ic_force_xiangxin.png'
 	},
 	{
+		key: 'lixin',
 		title: '离心等张模式',
 		description: '促进内分泌循环，带来更大肌肉维度，促进肌肉生长',
 		icon: '/static/icons/freeTrainingActivity/ic_force_lixin.png'
 	},
 	{
+		key: 'liuti',
 		title: '流体阻力模式',
 		description: '模仿风阻、水阻划船器特性，可以达到一个全身肌肉有氧练习效果',
 		icon: '/static/icons/freeTrainingActivity/ic_force_liuti.png'
 	},
 	{
+		key: 'dengsu',
 		title: '等速模式',
 		description: '出拳速度恒定，适合康复运动',
 		icon: '/static/icons/freeTrainingActivity/ic_force_dengsu.png'
 	},
 	{
+		key: 'tanli',
 		title: '弹力模式',
 		description: '弹性阻力随伸长率变化，有效改善肌力、灵活性，提高运动成绩',
 		icon: '/static/icons/freeTrainingActivity/ic_force_tanli.png'
-	},
-	{
-		title: '恒力模式',
-		description: '阻力大小恒定，贴近日常生活和工作',
-		icon: '/static/icons/freeTrainingActivity/ic_force_hengli.png'
 	}
 ])
 
@@ -105,8 +111,9 @@ const selectMode = (index) => {
 
 // 开始训练
 const startTraining = () => {
+	const selectedMode = trainingModes.value[selectedModeIndex.value]
 	uni.navigateTo({
-		url: `/pages/freeTraining/free-training?modeIndex=${selectedModeIndex.value}`
+		url: `/pages/freeTraining/free-training?modeKey=${selectedMode.key}`
 	})
 }
 </script>

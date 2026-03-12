@@ -63,54 +63,58 @@
 			<text class="title-sub">Tovigor的健身世界，活力一触即发！</text>
 		</view>
 
-		<!-- 功能卡片区域 -->
-		<view class="card-grid">
-			<!-- 自由训练 -->
-			<view class="card-left" @click="goToFreeTraining">
-				<view class="card card-large card-free">
-					<image class="card-bg-img" src="/static/icons/homeActivity/bg_free_training.svg" mode="aspectFill"></image>
-					<view class="card-content">
-						<text class="card-title">自由训练</text>
-						<text class="card-subtitle">数字力量 自由掌握</text>
+		<!-- 主功能区容器 -->
+		<view class="main-section">
+			<!-- 功能卡片区域 -->
+			<view class="card-grid">
+				<!-- 自由训练 -->
+				<view class="card-left" @click="goToFreeTraining">
+					<view class="card card-large card-free">
+						<image class="card-bg-img" src="/static/icons/homeActivity/bg_free_training.svg" mode="aspectFill"></image>
+						<view class="card-content">
+							<text class="card-title">自由训练</text>
+							<text class="card-subtitle">数字力量 自由掌握</text>
+						</view>
+					</view>
+				</view>
+
+				<!-- 右侧卡片组 -->
+				<view class="card-right">
+				<!-- 部位训练 -->
+				<view class="card card-small card-body" @click="goToPartTraining">
+						<image class="card-bg-img" src="/static/icons/homeActivity/bg_body_training.svg" mode="aspectFill"></image>
+						<view class="card-content">
+							<text class="card-title">部位训练</text>
+							<text class="card-subtitle">针对各部位的系统设计</text>
+						</view>
+					</view>
+
+					<!-- 智能评估 -->
+					<view class="card card-small card-assess" @click="goToSmartAssess">
+						<image class="card-bg-img" src="/static/icons/homeActivity/bg_smart_assess.svg" mode="aspectFill"></image>
+						<view class="card-content">
+							<text class="card-title">智能评估</text>
+							<text class="card-subtitle">定制专属自己的健康方案</text>
+						</view>
 					</view>
 				</view>
 			</view>
 
-			<!-- 右侧卡片组 -->
-			<view class="card-right">
-			<!-- 部位训练 -->
-			<view class="card card-small card-body" @click="goToPartTraining">
-					<image class="card-bg-img" src="/static/icons/homeActivity/bg_body_training.svg" mode="aspectFill"></image>
-					<view class="card-content">
-						<text class="card-title">部位训练</text>
-						<text class="card-subtitle">针对各部位的系统设计</text>
+			<!-- 娱乐休闲区 -->
+			<view class="entertainment-section">
+				<text class="entertainment-title">娱乐休闲</text>
+				<view class="entertainment-grid">
+					<!-- 管道小鸟游戏入口 -->
+					<view class="game-item" @click="goToFlappyBird">
+						<image class="game-icon" src="/static/icons/games/flappyBirdGame/ic_bird.png" mode="aspectFit"></image>
+						<text class="game-name">管道小鸟</text>
+					</view>
+					<!-- 更多游戏占位 -->
+					<view class="game-item game-item-add">
+						<text class="game-add-icon">+</text>
+						<text class="game-name">点击更多</text>
 					</view>
 				</view>
-
-				<!-- 智能评估 -->
-				<view class="card card-small card-assess" @click="goToSmartAssess">
-					<image class="card-bg-img" src="/static/icons/homeActivity/bg_smart_assess.svg" mode="aspectFill"></image>
-					<view class="card-content">
-						<text class="card-title">智能评估</text>
-						<text class="card-subtitle">定制专属自己的健康方案</text>
-					</view>
-				</view>
-			</view>
-		</view>
-
-		<!-- 娱乐休闲 + 智慧AI咨询 + 添加训练 -->
-		<view class="function-row">
-			<view class="function-item">
-				<image class="function-icon" src="/static/icons/homeActivity/ic_games.svg" mode="aspectFit"></image>
-				<text class="function-text">娱乐休闲</text>
-			</view>
-			<view class="function-item function-middle">
-				<image class="function-avatar" src="/static/icons/homeActivity/trimming.png" mode="aspectFill"></image>
-				<text class="function-text">智慧AI咨询</text>
-			</view>
-			<view class="function-item function-add">
-				<text class="add-icon">+</text>
-				<text class="function-text">添加训练</text>
 			</view>
 		</view>
 
@@ -280,6 +284,13 @@ const goToSerialTestV2 = () => {
 	})
 }
 
+// 跳转到管道小鸟游戏
+const goToFlappyBird = () => {
+	uni.navigateTo({
+		url: '/pages/games/flappyBird/flappy-bird'
+	})
+}
+
 onMounted(() => {
 	calcScrollHeight()
 	// 监听窗口尺寸变化（仅 H5/APP 生效，无小程序依赖）
@@ -400,7 +411,7 @@ page {
 .card-grid {
 	display: flex;
 	flex-direction: row;
-	margin-bottom: 20rpx;
+	margin-bottom: 0;
 	flex-shrink: 0;
 }
 
@@ -464,7 +475,7 @@ page {
 }
 
 .card-title {
-	font-size: 28rpx;
+	font-size: 32rpx;
 	font-weight: bold;
 	color: #000000;
 	margin-bottom: 6rpx;
@@ -475,61 +486,87 @@ page {
 	color: #333333;
 }
 
-/* 功能行 */
-.function-row {
+/* 主功能区容器 */
+.main-section {
+	flex-shrink: 0;
+	background: linear-gradient(145deg, #FFFFFF, #F0F0F0);
+	border-radius: 24rpx;
+	padding: 24rpx;
+	margin-bottom: 20rpx;
+	box-shadow: 
+		0 8rpx 24rpx rgba(0, 0, 0, 0.1),
+		0 2rpx 6rpx rgba(0, 0, 0, 0.06),
+		inset 0 2rpx 0 rgba(255, 255, 255, 0.9),
+		inset 0 -2rpx 4rpx rgba(0, 0, 0, 0.05);
+	border: 2rpx solid rgba(255, 255, 255, 0.8);
+}
+
+/* 娱乐休闲区 */
+.entertainment-section {
+	margin-top: 20rpx;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 20rpx;
-	flex-shrink: 0;
 }
 
-.function-item {
-	flex: 1;
-	background-color: #FFFFFF;
-	border-radius: 12rpx;
-	padding: 15rpx 10rpx;
+.entertainment-title {
+	margin-left: 20rpx;  /* 与 自由训练完全对齐需要20rpx */
+	font-size: 32rpx;
+	font-weight: bold;
+	color: #666666;
+}
+
+.entertainment-grid {
+	display: flex;
+	flex-direction: row;
+	gap: 20rpx;
+}
+
+.game-item {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	margin-right: 15rpx;
+	width: 140rpx;
+	height: 120rpx;
+	background: linear-gradient(145deg, #FAFAFA, #EEEEEE);
+	border-radius: 16rpx;
+	box-shadow: 
+		0 4rpx 12rpx rgba(0, 0, 0, 0.08),
+		inset 0 1rpx 0 rgba(255, 255, 255, 0.9);
+	transition: all 0.2s;
 }
 
-.function-item:last-child {
-	margin-right: 0;
+.game-item:active {
+	transform: scale(0.95);
+	box-shadow: 
+		0 2rpx 6rpx rgba(0, 0, 0, 0.1),
+		inset 0 1rpx 0 rgba(255, 255, 255, 0.9);
 }
 
-.function-middle {
-	margin-left: 0;
-	margin-right: 15rpx;
+.game-item-add {
+	background: linear-gradient(145deg, #F5F5F5, #E8E8E8);
+	border: 2rpx dashed #CCCCCC;
+	box-shadow: none;
 }
 
-.function-icon {
-	width: 40rpx;
-	height: 40rpx;
+.game-icon {
+	width: 56rpx;
+	height: 56rpx;
 	margin-bottom: 8rpx;
 }
 
-.function-avatar {
-	width: 40rpx;
-	height: 40rpx;
-	border-radius: 20rpx;
+.game-add-icon {
+	font-size: 40rpx;
+	color: #999999;
+	line-height: 1;
 	margin-bottom: 8rpx;
 }
 
-.function-text {
+.game-name {
 	font-size: 20rpx;
-	color: #333333;
-	text-align: center;
-}
-
-.add-icon {
-	font-size: 36rpx;
-	color: #333333;
-	line-height: 40rpx;
-	margin-bottom: 8rpx;
+	color: #666666;
 }
 
 /* 课程推荐 */

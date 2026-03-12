@@ -126,9 +126,245 @@
       </scroll-view>
     </view>
     
+    <!-- 帧详情解析 -->
+    <view class="section">
+      <view class="section-header">
+        <text class="section-title">6. 帧详情解析 (最新A9帧)</text>
+        <button @click="toggleFrameDetail" class="btn btn-small">
+          {{ showFrameDetail ? '收起' : '展开' }}
+        </button>
+      </view>
+      
+      <view v-if="latestA9Frame" class="frame-detail" :class="{ expanded: showFrameDetail }">
+        <!-- 基本信息 -->
+        <view class="detail-group">
+          <text class="detail-group-title">基本信息</text>
+          <view class="detail-row">
+            <text class="detail-label">帧头:</text>
+            <text class="detail-value">0x{{ latestA9Frame.header?.toString(16).toUpperCase().padStart(2, '0') }}</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">包类型:</text>
+            <text class="detail-value">0x{{ latestA9Frame.packType?.toString(16).toUpperCase().padStart(2, '0') }} (A9)</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">序号:</text>
+            <text class="detail-value">{{ latestA9Frame.index }}</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">CRC:</text>
+            <text class="detail-value" :class="latestA9Frame.crc?.valid ? 'crc-valid' : 'crc-invalid'">
+              {{ latestA9Frame.crc?.valid ? '✓ 有效' : '✗ 无效' }}
+              (帧: 0x{{ latestA9Frame.crc?.field?.toString(16).toUpperCase().padStart(4, '0') }}, 
+               计算: 0x{{ latestA9Frame.crc?.calc?.toString(16).toUpperCase().padStart(4, '0') }})
+            </text>
+          </view>
+        </view>
+        
+        <!-- 左手数据 -->
+        <view class="detail-group">
+          <text class="detail-group-title">🤚 左手数据</text>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="cell-label">距离</text>
+              <text class="cell-value">{{ latestA9Frame.left?.distance }} mm</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">速度</text>
+              <text class="cell-value">{{ latestA9Frame.left?.speed }} mm/s</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">次数</text>
+              <text class="cell-value">{{ latestA9Frame.left?.count }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">功率</text>
+              <text class="cell-value">{{ latestA9Frame.left?.power }} W</text>
+            </view>
+            <view class="detail-cell highlight">
+              <text class="cell-label">瞬时力量</text>
+              <text class="cell-value">{{ latestA9Frame.left?.instantForce?.toFixed(1) }} kg</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 右手数据 -->
+        <view class="detail-group">
+          <text class="detail-group-title">✋ 右手数据</text>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="cell-label">距离</text>
+              <text class="cell-value">{{ latestA9Frame.right?.distance }} mm</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">速度</text>
+              <text class="cell-value">{{ latestA9Frame.right?.speed }} mm/s</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">次数</text>
+              <text class="cell-value">{{ latestA9Frame.right?.count }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">功率</text>
+              <text class="cell-value">{{ latestA9Frame.right?.power }} W</text>
+            </view>
+            <view class="detail-cell highlight">
+              <text class="cell-label">瞬时力量</text>
+              <text class="cell-value">{{ latestA9Frame.right?.instantForce?.toFixed(1) }} kg</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 设定反馈 -->
+        <view class="detail-group">
+          <text class="detail-group-title">⚙️ 设定反馈</text>
+          <view class="detail-grid">
+            <view class="detail-cell highlight">
+              <text class="cell-label">设定力量</text>
+              <text class="cell-value">{{ latestA9Frame.setForce }} kg</text>
+            </view>
+            <view class="detail-cell highlight">
+              <text class="cell-label">力量模式</text>
+              <text class="cell-value">{{ latestA9Frame.setForceMode }} ({{ latestA9Frame.setForceModeText }})</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">双手功率</text>
+              <text class="cell-value">{{ latestA9Frame.bothHandsPower }} W</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 运动汇总 -->
+        <view class="detail-group">
+          <text class="detail-group-title">📊 运动汇总</text>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="cell-label">卡路里</text>
+              <text class="cell-value">{{ latestA9Frame.calories?.toFixed(2) }} kcal</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">运动时间</text>
+              <text class="cell-value">{{ latestA9Frame.sportTime }} s</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">运动次数</text>
+              <text class="cell-value">{{ latestA9Frame.sportCount }}</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 温度 -->
+        <view class="detail-group">
+          <text class="detail-group-title">🌡️ 温度</text>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="cell-label">M0 MOS</text>
+              <text class="cell-value">{{ latestA9Frame.temperature?.m0Mos }}°C</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">M1 MOS</text>
+              <text class="cell-value">{{ latestA9Frame.temperature?.m1Mos }}°C</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">M0 电机</text>
+              <text class="cell-value">{{ latestA9Frame.temperature?.m0Motor }}°C</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">M1 电机</text>
+              <text class="cell-value">{{ latestA9Frame.temperature?.m1Motor }}°C</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 状态信息 -->
+        <view class="detail-group">
+          <text class="detail-group-title">📡 状态信息</text>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="cell-label">母线电压</text>
+              <text class="cell-value">{{ latestA9Frame.busVoltage }} mV</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">驱动状态</text>
+              <text class="cell-value">0x{{ latestA9Frame.driverStatus?.toString(16).toUpperCase().padStart(2, '0') }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">休眠状态</text>
+              <text class="cell-value">{{ latestA9Frame.sleepState === 0 ? '未休眠' : '休眠' }}</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 延迟 -->
+        <view class="detail-group">
+          <text class="detail-group-title">⏱️ 延迟</text>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="cell-label">D2C</text>
+              <text class="cell-value">{{ latestA9Frame.delay?.d2c }} ms</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">C2D</text>
+              <text class="cell-value">{{ latestA9Frame.delay?.c2d }} ms</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">A2C</text>
+              <text class="cell-value">{{ latestA9Frame.delay?.a2c }} ms</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- LOG -->
+        <view class="detail-group">
+          <text class="detail-group-title">📝 LOG</text>
+          <view class="detail-grid">
+            <view class="detail-cell">
+              <text class="cell-label">count</text>
+              <text class="cell-value">{{ latestA9Frame.log?.count }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">level</text>
+              <text class="cell-value">{{ latestA9Frame.log?.level }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">event</text>
+              <text class="cell-value">{{ latestA9Frame.log?.event }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">i0</text>
+              <text class="cell-value">{{ latestA9Frame.log?.i0 }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">f0</text>
+              <text class="cell-value">{{ latestA9Frame.log?.f0?.toFixed(4) }}</text>
+            </view>
+            <view class="detail-cell">
+              <text class="cell-label">f1</text>
+              <text class="cell-value">{{ latestA9Frame.log?.f1?.toFixed(4) }}</text>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 远程命令 -->
+        <view class="detail-group">
+          <text class="detail-group-title">🎮 远程命令</text>
+          <view class="detail-row">
+            <text class="detail-label">remoteCmd:</text>
+            <text class="detail-value mono">
+              [{{ latestA9Frame.remoteCmd?.map(v => '0x' + v?.toString(16).toUpperCase().padStart(2, '0')).join(', ') }}]
+            </text>
+          </view>
+        </view>
+      </view>
+      
+      <view v-else class="empty-state">
+        <text>暂无 A9 帧数据</text>
+      </view>
+    </view>
+    
     <!-- 统计信息 -->
     <view class="section">
-      <text class="section-title">6. 统计信息</text>
+      <text class="section-title">7. 统计信息</text>
       <view class="stats-grid">
         <view class="stat-item">
           <text class="stat-label">完整帧数</text>
@@ -168,6 +404,10 @@ const frameMessages = ref([])  // 完整帧（经过帧解析）
 const rawMessages = ref([])    // 原始数据（调试用）
 const maxMessages = 200
 
+// 帧详情
+const latestA9Frame = ref(null)  // 最新的 A9 帧解析结果
+const showFrameDetail = ref(true)  // 是否展开详情面板
+
 // 压测相关
 const isStressTesting = ref(false)
 let stressTestTimer = null
@@ -201,6 +441,11 @@ const handleFrame = (data) => {
   if (frameBuffer.length > maxMessages) {
     frameBuffer.pop()
   }
+  
+  // 更新最新 A9 帧详情
+  if (data.parsed?.type === 'A9') {
+    latestA9Frame.value = data.parsed
+  }
 }
 
 // 收到原始数据
@@ -230,6 +475,10 @@ const handleConnect = async () => {
       baudRate: baudRates.value[baudRateIndex.value]
     })
     isConnected.value = true
+    
+    // v3 架构：连接后需手动启动轮询读取
+    serial.startReading()
+    
     uni.hideLoading()
     uni.showToast({ title: '连接成功', icon: 'success' })
   } catch (err) {
@@ -245,6 +494,9 @@ const handleConnect = async () => {
 // 断开连接
 const handleDisconnect = async () => {
   try {
+    // 先停止读取
+    serial.stopReading()
+    
     await serial.disconnect()
     isConnected.value = false
     uni.showToast({ title: '已断开', icon: 'success' })
@@ -283,6 +535,9 @@ onMounted(() => {
     isConnected.value = true
     devicePath.value = status.config.path
     console.log('[v2] 复用已有连接:', status)
+    
+    // v3 架构：复用连接也需要启动读取
+    serial.startReading()
   }
   
   // 订阅事件
@@ -307,6 +562,9 @@ onBeforeUnmount(() => {
   
   // 停止 UI 刷新
   stopUiRefresh()
+  
+  // 停止读取（v3 架构）
+  serial.stopReading()
   
   // 取消订阅（重要！防止内存泄漏）
   serial.off('frame', handleFrame)
@@ -494,6 +752,7 @@ const stopStressTest2 = () => {
 const clearFrames = () => {
   frameBuffer = []
   frameMessages.value = []
+  latestA9Frame.value = null
 }
 
 const clearRaw = () => {
@@ -502,6 +761,10 @@ const clearRaw = () => {
 }
 
 // ============ 工具函数 ============
+
+const toggleFrameDetail = () => {
+  showFrameDetail.value = !showFrameDetail.value
+}
 
 const onBaudRateChange = (e) => {
   baudRateIndex.value = e.detail.value
@@ -760,6 +1023,106 @@ const formatTime = (timestamp) => {
   font-size: 36rpx;
   font-weight: bold;
   color: #2ecc71;
+  display: block;
+}
+
+/* ============ 帧详情面板样式 ============ */
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.frame-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.frame-detail.expanded {
+  max-height: 3000rpx;
+}
+
+.detail-group {
+  background-color: #f9f9f9;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.detail-group-title {
+  font-size: 28rpx;
+  font-weight: bold;
+  color: #333;
+  display: block;
+  margin-bottom: 16rpx;
+  padding-bottom: 10rpx;
+  border-bottom: 2rpx solid #e0e0e0;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  padding: 8rpx 0;
+}
+
+.detail-label {
+  font-size: 24rpx;
+  color: #666;
+  width: 180rpx;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  font-size: 24rpx;
+  color: #333;
+  flex: 1;
+}
+
+.detail-value.mono {
+  font-family: monospace;
+}
+
+.detail-value.crc-valid {
+  color: #2ecc71;
+}
+
+.detail-value.crc-invalid {
+  color: #e74c3c;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+}
+
+.detail-cell {
+  background-color: #fff;
+  border-radius: 8rpx;
+  padding: 16rpx;
+  text-align: center;
+  border: 2rpx solid #e8e8e8;
+}
+
+.detail-cell.highlight {
+  background-color: #e8f5e9;
+  border-color: #2ecc71;
+}
+
+.cell-label {
+  font-size: 22rpx;
+  color: #999;
+  display: block;
+  margin-bottom: 6rpx;
+}
+
+.cell-value {
+  font-size: 26rpx;
+  color: #333;
+  font-weight: bold;
   display: block;
 }
 </style>

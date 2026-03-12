@@ -250,7 +250,7 @@ const goalOptions = [
 	{ value: 'muscle', label: '增肌增力' },
 	{ value: 'health', label: '全面健康' },
 	{ value: 'wellness', label: '健康养生' },
-	{ value: 'youth', label: '青少年适能' }
+	{ value: 'youth', label: '适能训练' }
 ]
 
 const levelOptions = [
@@ -289,8 +289,7 @@ const equipmentOptions = [
 	{ value: 'foam-roller', label: '泡沫轴' },
 	{ value: 'yoga-mat', label: '瑜伽垫' },
 	{ value: 'pull-up-bar', label: '单杠' },
-	{ value: 'rope', label: '绳索' },
-	{ value: 'bicep-curl', label: '肱二头' }
+	{ value: 'rope', label: '绳索' }
 ]
 
 const coachOptions = [
@@ -416,7 +415,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .sidebar {
-	width: 240rpx;
+	width: 200rpx;
 	padding: 8rpx 8rpx 12rpx;
 	border-radius: 16rpx;
 	background-color: rgba(243, 244, 246, 0.95);

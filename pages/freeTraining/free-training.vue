@@ -1,5 +1,17 @@
 <template>
 	<view class="container" @touchmove.prevent>
+		<!-- 自定义导航栏 -->
+		<view class="nav-bar">
+			<image 
+				class="back-btn" 
+				src="/static/icons/general/btn_general_back.svg" 
+				mode="aspectFit"
+				@click="goBack"
+			></image>
+			<text class="nav-title">自由训练</text>
+			<view class="nav-placeholder"></view>
+		</view>
+
 		<!-- 数据看板 -->
 		<view class="stat-board">
 			<image class="board-bg" src="/static/icons/freeTrainingActivity/bg_statBoard.png" mode="aspectFill"></image>
@@ -38,7 +50,12 @@
 			</view>
 		</view>
 		
-		<!-- 中央控制区：力量旋钮 + 开关 -->
+		<!-- 力量曲线面板（占位图） -->
+		<view class="force-curve-panel">
+			<image class="force-curve-img" src="/static/icons/freeTrainingActivity/force-curve-fake.jpg" mode="aspectFit"></image>
+		</view>
+		
+		<!-- 力量控制区：旋钮 + 开关 -->
 		<view class="control-center">
 			<!-- 力量旋钮区域 -->
 			<view class="dial-wrapper"
@@ -69,38 +86,36 @@
 					<!-- 力量值显示 -->
 					<text class="dial-value">{{ dial.currentValue }}</text>
 					<text class="dial-unit">kg</text>
-					
-					<!-- 中心开关按钮 -->
-					<view class="dial-power-btn" @tap.stop="togglePower">
-						<image class="power-icon" 
-							src="/static/icons/freeTrainingActivity/ic_power.svg" 
-							mode="aspectFit" />
-					</view>
+				</view>
+				
+				<!-- 开关按钮（位于圆球正中央） -->
+				<view class="dial-power-btn" 
+					@tap.stop="togglePower"
+					@touchstart.stop
+					@touchmove.stop>
+					<image class="power-icon" 
+						src="/static/icons/freeTrainingActivity/ic_power.svg" 
+						mode="aspectFit" />
 				</view>
 			</view>
 		</view>
 		
 		<!-- 底部模式选择 -->
 		<view :class="bottomPanelClass">
-			<text class="mode-title">训练模式</text>
+			<view class="mode-label mode-label--active">
+				<text class="mode-label-text">模式</text>
+				<text class="mode-label-text">选择</text>
+			</view>
 			<view class="mode-grid">
 				<view 
 					class="mode-item" 
 					v-for="(mode, index) in modes" 
 					:key="mode.key"
-					:class="{ 'selected': selectedMode === index, 'disabled': !powerOn }"
+					:class="{ 'selected': selectedMode === index }"
 					@click="selectMode(index)">
 					<image class="mode-icon" :src="mode.icon" mode="aspectFit"></image>
-					<text class="mode-name">{{ mode.name }}</text>
+					<text class="mode-name">{{ mode.shortName }}</text>
 				</view>
-			</view>
-			
-			<!-- 模式确认按钮 -->
-			<view 
-				class="mode-confirm-btn" 
-				:class="{ 'active': hasMode && powerOn }"
-				@click="confirmMode">
-				<text class="btn-text">{{ hasMode ? modes[selectedMode].name + '训练' : '请选择训练模式' }}</text>
 			</view>
 		</view>
 		
@@ -124,7 +139,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { onReady, onBackPress } from '@dcloudio/uni-app'
+import { onReady, onBackPress, onLoad } from '@dcloudio/uni-app'
 
 // ==================== 状态管理 ====================
 const showSafetyModal = ref(false)
@@ -150,41 +165,47 @@ const dial = ref({
 	center: null        // {x,y} 记录圆心，用于触摸计算
 })
 
-// 模式列表
+// 模式列表（恒力排在最前面）
 const modes = ref([
+	{
+		key: 'hengli',
+		name: '恒力',
+		shortName: '恒力',
+		icon: '/static/icons/freeTrainingActivity/ic_force_hengli.png'
+	},
 	{
 		key: 'xiangxin',
 		name: '向心等张',
+		shortName: '向心',
 		icon: '/static/icons/freeTrainingActivity/ic_force_xiangxin.png'
 	},
 	{
 		key: 'lixin',
 		name: '离心等张',
+		shortName: '离心',
 		icon: '/static/icons/freeTrainingActivity/ic_force_lixin.png'
 	},
 	{
 		key: 'liuti',
 		name: '流体阻力',
+		shortName: '流体',
 		icon: '/static/icons/freeTrainingActivity/ic_force_liuti.png'
 	},
 	{
 		key: 'dengsu',
 		name: '等速',
+		shortName: '等速',
 		icon: '/static/icons/freeTrainingActivity/ic_force_dengsu.png'
 	},
 	{
 		key: 'tanli',
 		name: '弹力',
+		shortName: '弹力',
 		icon: '/static/icons/freeTrainingActivity/ic_force_tanli.png'
-	},
-	{
-		key: 'hengli',
-		name: '恒力',
-		icon: '/static/icons/freeTrainingActivity/ic_force_hengli.png'
 	}
 ])
 
-const selectedMode = ref(null)
+const selectedMode = ref(0) // 默认选中恒力（索引 0）
 
 // 定时器
 let trainingTimer = null
@@ -203,7 +224,7 @@ const progressRatio = computed(() => {
 })
 
 const bottomPanelClass = computed(() => {
-	return powerOn.value ? 'bottom-panel' : 'bottom-panel bottom-panel--off'
+	return 'bottom-panel'
 })
 
 const hasMode = computed(() => {
@@ -219,6 +240,18 @@ const pageTitle = computed(() => {
 })
 
 // ==================== 生命周期 ====================
+// 接收上一页传递的模式参数
+onLoad((options) => {
+	if (options.modeKey) {
+		// 根据 key 找到对应的索引
+		const index = modes.value.findIndex(m => m.key === options.modeKey)
+		if (index !== -1) {
+			selectedMode.value = index
+		}
+	}
+	// 如果没有传参数，保持默认值 0（恒力）
+})
+
 onMounted(() => {
 	showSafetyModal.value = true
 })
@@ -270,17 +303,27 @@ const togglePower = () => {
 		dial.value.currentValue = 0
 		dial.value.currentAngle = dial.value.startAngle
 	}
+	
+	// TODO: 通知下位机开/关机
+	// if (powerOn.value) {
+	//   const mode = modes.value[selectedMode.value]
+	//   startWorking(dial.value.currentValue, FORCE_MODE[mode.key.toUpperCase()])
+	// } else {
+	//   stopWorking()
+	// }
 }
 
-// 模式选择
+// 模式选择（选择即确认，不依赖开关状态）
 const selectMode = (index) => {
-	selectedMode.value = index
-	const mode = modes.value[index]
-	// console.log('选择模式:', mode.name)
+	if (selectedMode.value === index) return // 防止重复选择同一个
 	
-	if (mode.key === 'liuti') {
-		// TODO: 切换为流体阻力 UI, 通知下位机等
-	}
+	selectedMode.value = index
+	
+	// TODO: 如果已开机，通知下位机切换模式
+	// if (powerOn.value) {
+	//   const mode = modes.value[index]
+	//   sendModeToDevice(mode.key)
+	// }
 }
 
 // 旋钮拖动（触摸开始/移动触发）
@@ -335,22 +378,6 @@ const onDialTouch = (e) => {
 	// 7. 通知下位机
 	// TODO: sendStrengthToDevice(dial.value.currentValue)
 }
-
-const confirmMode = () => {
-	if (!hasMode.value) {
-		uni.showToast({
-			title: '请先选择训练模式',
-			icon: 'none'
-		})
-		return
-	}
-	
-	const mode = modes.value[selectedMode.value]
-	uni.showToast({
-		title: `已选择 ${mode.name} 模式`,
-		icon: 'success'
-	})
-}
 </script>
 
 <style scoped>
@@ -361,9 +388,35 @@ const confirmMode = () => {
 	height: 100vh;
 	width: 100vw;
 	background-color: #FFFFFF;
-	padding: 40rpx;
+	padding: 0 40rpx 40rpx 40rpx;
 	overflow: hidden;
 	box-sizing: border-box;
+}
+
+/* ==================== 自定义导航栏 ==================== */
+.nav-bar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	height: 90rpx;
+	padding-top: 20rpx;
+	margin-bottom: 20rpx;
+	flex-shrink: 0;
+}
+
+.back-btn {
+	width: 56rpx;
+	height: 56rpx;
+}
+
+.nav-title {
+	font-size: 36rpx;
+	font-weight: bold;
+	color: #333;
+}
+
+.nav-placeholder {
+	width: 56rpx;
 }
 
 /* ==================== 数据看板 ==================== */
@@ -371,8 +424,16 @@ const confirmMode = () => {
 	position: relative;
 	width: 100%;
 	height: 160rpx;
-	margin-bottom: 40rpx;
+	margin-bottom: 24rpx;
 	flex-shrink: 0;
+	background: linear-gradient(145deg, #ffffff, #f0f0f0);
+	border-radius: 24rpx;
+	border: 3rpx solid #d0d0d0;
+	box-shadow: 
+		0 8rpx 24rpx rgba(0, 0, 0, 0.12),
+		0 2rpx 6rpx rgba(0, 0, 0, 0.08),
+		inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+	overflow: hidden;
 }
 
 .board-bg {
@@ -425,7 +486,28 @@ const confirmMode = () => {
 	height: 80rpx;
 }
 
-/* ==================== 中央控制区：力量旋钮 ==================== */
+/* ==================== 力量曲线面板 ==================== */
+.force-curve-panel {
+	position: relative;
+	width: 100%;
+	height: 280rpx;
+	margin-bottom: 24rpx;
+	flex-shrink: 0;
+	border-radius: 24rpx;
+	border: 3rpx solid #d0d0d0;
+	box-shadow: 
+		0 8rpx 24rpx rgba(0, 0, 0, 0.12),
+		0 2rpx 6rpx rgba(0, 0, 0, 0.08),
+		inset 0 1rpx 0 rgba(255, 255, 255, 0.8);
+	overflow: hidden;
+}
+
+.force-curve-img {
+	width: 100%;
+	height: 100%;
+}
+
+/* ==================== 力量控制区：旋钮 ==================== */
 .control-center {
 	position: relative;
 	display: flex;
@@ -434,7 +516,7 @@ const confirmMode = () => {
 	width: 100%;
 	flex: 1;
 	min-height: 0;
-	margin-bottom: 30rpx;
+	margin-bottom: 20rpx;
 }
 
 .dial-wrapper {
@@ -444,6 +526,7 @@ const confirmMode = () => {
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	overflow: visible;
 }
 
 /* 圆弧背景（灰色底） */
@@ -494,11 +577,14 @@ const confirmMode = () => {
 	);
 }
 
-/* 装饰图片 */
+/* 装饰图片（光环平面效果） */
 .dial-decoration {
 	position: absolute;
-	width: 100%;
-	height: 100%;
+	width: 550rpx;
+	height: 300rpx;
+	bottom: -60rpx;
+	left: 50%;
+	transform: translateX(-50%);
 	pointer-events: none;
 	z-index: 1;
 }
@@ -506,64 +592,81 @@ const confirmMode = () => {
 /* 圆形中心区域 */
 .dial-circle {
 	position: relative;
-	width: 240rpx;
-	height: 240rpx;
+	width: 200rpx;
+	height: 200rpx;
 	border-radius: 50%;
-	background: rgba(200, 200, 200, 0.5);
+	background: linear-gradient(180deg, #f5f5f5 0%, #e0e0e0 100%);
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.1);
+	box-shadow: 
+		0 12rpx 30rpx rgba(0, 0, 0, 0.15),
+		inset 0 2rpx 4rpx rgba(255, 255, 255, 0.8);
 	transition: all 0.3s;
+	z-index: 2;
 }
 
 .dial-circle--on {
-	background: linear-gradient(135deg, rgba(76, 175, 80, 0.3), rgba(139, 195, 74, 0.3));
-	box-shadow: 0 8rpx 30rpx rgba(76, 175, 80, 0.4);
+	background: linear-gradient(180deg, rgba(139, 195, 74, 0.6) 0%, rgba(76, 175, 80, 0.7) 100%);
+	box-shadow: 
+		0 12rpx 40rpx rgba(76, 175, 80, 0.5),
+		inset 0 2rpx 4rpx rgba(255, 255, 255, 0.5);
 }
 
 /* 力量值显示 */
 .dial-value {
-	font-size: 56rpx;
+	font-size: 52rpx;
 	font-weight: bold;
 	color: #333333;
 	line-height: 1;
 }
 
 .dial-unit {
-	font-size: 24rpx;
+	font-size: 22rpx;
 	color: #666666;
-	margin-top: 4rpx;
+	margin-top: 2rpx;
 }
 
-/* 中心开关按钮 */
+/* 开关按钮（位于圆球正中央） */
 .dial-power-btn {
 	position: absolute;
-	bottom: -20rpx;
-	width: 80rpx;
-	height: 80rpx;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	width: 90rpx;
+	height: 90rpx;
 	border-radius: 50%;
-	background: rgba(255, 255, 255, 0.9);
+	background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.15);
+	box-shadow: 
+		0 6rpx 16rpx rgba(0, 0, 0, 0.2),
+		inset 0 1rpx 2rpx rgba(255, 255, 255, 0.9);
 	transition: all 0.3s;
+	z-index: 3;
 }
 
 .dial-power-btn:active {
-	transform: scale(0.95);
+	transform: translate(-50%, -50%) scale(0.95);
 }
 
 .power-icon {
-	width: 50rpx;
-	height: 50rpx;
+	width: 48rpx;
+	height: 48rpx;
+	opacity: 0.7;
 }
 
 /* ==================== 底部模式选择区 ==================== */
 .bottom-panel {
 	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	background: #f5f5f5;
+	border-radius: 50rpx;
+	padding: 16rpx 24rpx;
+	gap: 20rpx;
 	transition: opacity 0.3s;
 }
 
@@ -572,35 +675,58 @@ const confirmMode = () => {
 	pointer-events: none;
 }
 
-.mode-title {
-	font-size: 28rpx;
-	color: #333333;
+.mode-label {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 80rpx;
+	height: 80rpx;
+	border-radius: 50%;
+	background: transparent;
+	transition: all 0.25s ease;
+}
+
+.mode-label--active {
+	background: #8BC34A;
+}
+
+.mode-label-text {
+	font-size: 24rpx;
+	color: #666666;
 	font-weight: bold;
-	margin-bottom: 20rpx;
+	line-height: 1.3;
+	transition: color 0.25s ease;
+}
+
+.mode-label--active .mode-label-text {
+	color: #FFFFFF;
 }
 
 .mode-grid {
 	display: flex;
+	flex: 1;
 	justify-content: space-between;
-	gap: 10rpx;
-	margin-bottom: 30rpx;
+	align-items: center;
+	gap: 8rpx;
 }
 
 .mode-item {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 8rpx;
-	padding: 10rpx;
-	border-radius: 12rpx;
-	background: rgba(255, 255, 255, 0.3);
-	transition: all 0.3s;
-	flex: 1;
+	justify-content: center;
+	padding: 8rpx 12rpx;
+	border-radius: 16rpx;
+	background: transparent;
+	transition: all 0.25s ease;
+	gap: 4rpx;
 }
 
 .mode-item.selected {
-	background: rgba(76, 175, 80, 0.3);
-	transform: scale(1.05);
+	background: #8BC34A;
+	box-shadow: 0 4rpx 12rpx rgba(139, 195, 74, 0.4);
 }
 
 .mode-item.disabled {
@@ -609,46 +735,23 @@ const confirmMode = () => {
 }
 
 .mode-icon {
-	width: 60rpx;
-	height: 60rpx;
-	transition: all 0.3s;
+	width: 48rpx;
+	height: 48rpx;
+	transition: all 0.25s ease;
 }
 
 .mode-item.selected .mode-icon {
-	filter: drop-shadow(0 2rpx 8rpx rgba(76, 175, 80, 0.5));
+	filter: brightness(0) invert(1);
 }
 
 .mode-name {
 	font-size: 20rpx;
 	color: #666666;
-	transition: all 0.3s;
+	transition: color 0.25s ease;
 }
 
 .mode-item.selected .mode-name {
-	color: #000000;
-	font-weight: bold;
-}
-
-.mode-confirm-btn {
-	width: 100%;
-	height: 80rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: #CCCCCC;
-	border-radius: 50rpx;
-	transition: all 0.3s;
-}
-
-.mode-confirm-btn.active {
-	background: linear-gradient(135deg, #4CAF50, #8BC34A);
-	box-shadow: 0 8rpx 20rpx rgba(76, 175, 80, 0.4);
-}
-
-.btn-text {
-	font-size: 28rpx;
 	color: #FFFFFF;
-	font-weight: bold;
 }
 
 /* ==================== 安全须知弹窗 ==================== */
