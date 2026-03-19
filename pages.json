@@ -54,6 +54,15 @@
 			}
 		},
 		{
+			"path": "pages/freeTraining/action-training",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
 			"path": "pages/freeTraining/free-training",
 			"style": {
 				"navigationBarTitleText": "",

@@ -117,20 +117,17 @@ const handleDetail = () => {
 /* 底部信息 */
 .card-info {
 	display: flex;
-	flex-direction: row;
+	flex-direction: column;
 	align-items: center;
-	justify-content: space-between;
+	gap: 12rpx;
 	padding: 16rpx 20rpx;
 }
 
 .action-name {
-	flex: 1;
 	font-size: 24rpx;
 	font-weight: 600;
 	color: #333333;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	text-align: center;
 }
 
 .detail-btn {

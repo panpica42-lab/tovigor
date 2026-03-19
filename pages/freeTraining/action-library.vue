@@ -9,8 +9,16 @@
 				@click="goBack"
 			/>
 			<text class="nav-title">动作库</text>
-			<view class="done-btn" @click="handleDone">
+			<view 
+				class="done-btn" 
+				:class="{ 'done-btn--disabled': selectedCount === 0 }"
+				@click="handleDone"
+			>
 				<text class="done-btn-text">添加完成</text>
+				<!-- 选中数量徽章 -->
+				<view v-if="selectedCount > 0" class="badge">
+					<text class="badge-text">{{ selectedCount }}</text>
+				</view>
 			</view>
 		</view>
 
@@ -40,6 +48,17 @@
 				</view>
 			</scroll-view>
 		</view>
+
+		<!-- 动作详情弹窗 -->
+		<ActionDetailModal
+			v-model:visible="showDetailModal"
+			:action="currentDetailAction"
+			:is-selected="currentDetailAction ? isSelected(currentDetailAction.id) : false"
+			@select="handleSelectFromModal"
+		/>
+
+		<!-- 自定义轻量提示 -->
+		<CustomToast ref="toastRef" />
 	</view>
 </template>
 
@@ -47,6 +66,8 @@
 import { ref, computed } from 'vue'
 import TrainingFilterSidebar from '@/components/ui-box/training-filter-sidebar.vue'
 import ActionCard from './components/action-card.vue'
+import ActionDetailModal from './components/action-detail-modal.vue'
+import CustomToast from '@/components/modals/custom-toast.vue'
 
 // ========== 筛选状态 ==========
 const filters = ref({
@@ -104,6 +125,16 @@ const toggleSelect = (id) => {
 	}
 }
 
+// 选中数量
+const selectedCount = computed(() => selectedIds.value.length)
+
+// ========== 详情弹窗状态 ==========
+const showDetailModal = ref(false)
+const currentDetailAction = ref(null)
+
+// ========== 自定义提示 ==========
+const toastRef = ref(null)
+
 // ========== 事件处理 ==========
 // 返回上一页
 const goBack = () => {
@@ -112,6 +143,12 @@ const goBack = () => {
 
 // 添加完成
 const handleDone = () => {
+	// 校验：至少选择一个动作
+	if (selectedIds.value.length === 0) {
+		toastRef.value?.show('请先选择动作')
+		return
+	}
+	
 	// 获取选中的动作数据
 	const selectedActions = actionList.value.filter(a => selectedIds.value.includes(a.id))
 	
@@ -126,10 +163,15 @@ const handleDone = () => {
 
 // 查看详情
 const handleDetail = (action) => {
-	uni.showToast({
-		title: `${action.name} 详情`,
-		icon: 'none'
-	})
+	currentDetailAction.value = action
+	showDetailModal.value = true
+}
+
+// 从弹窗中选择添加
+const handleSelectFromModal = (action) => {
+	if (action && !isSelected(action.id)) {
+		selectedIds.value.push(action.id)
+	}
 }
 </script>
 
@@ -165,6 +207,7 @@ const handleDetail = (action) => {
 }
 
 .done-btn {
+	position: relative;
 	height: 56rpx;
 	padding: 0 24rpx;
 	background-color: #00C853;
@@ -177,6 +220,26 @@ const handleDetail = (action) => {
 .done-btn-text {
 	font-size: 24rpx;
 	font-weight: 600;
+	color: #ffffff;
+}
+
+/* 数量徽章 */
+.badge {
+	position: absolute;
+	top: -8rpx;
+	right: -8rpx;
+	width: 28rpx;
+	height: 28rpx;
+	background-color: #FF3B30;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.badge-text {
+	font-size: 18rpx;
+	font-weight: bold;
 	color: #ffffff;
 }
 
@@ -210,5 +273,10 @@ const handleDetail = (action) => {
 /* 卡片容器 - 控制宽度 */
 .action-card-wrapper {
 	width: calc(50% - 10rpx);
+}
+
+/* 按钮禁用状态 */
+.done-btn--disabled {
+	background-color: #cccccc;
 }
 </style>
