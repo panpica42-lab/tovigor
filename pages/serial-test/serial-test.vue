@@ -23,6 +23,17 @@
         <text class="label">设备路径:</text>
         <input v-model="devicePath" class="input" placeholder="/dev/ttyUSB0" />
       </view>
+      <!-- 快捷串口选择按钮 -->
+      <view class="quick-port-buttons">
+        <text class="label">快捷选择:</text>
+        <button 
+          v-for="port in quickPorts" 
+          :key="port"
+          @click="devicePath = port" 
+          class="btn btn-small"
+          :class="{ 'btn-active': devicePath === port }"
+        >{{ port.replace('/dev/tty', '') }}</button>
+      </view>
       <view class="form-item">
         <text class="label">波特率:</text>
         <picker :value="baudRateIndex" :range="baudRates" @change="onBaudRateChange">
@@ -157,9 +168,20 @@ onMounted(() => {
   uni.showToast({ title: '插件已加载', icon: 'success', duration: 1500 })
 })
 
-const devicePath = ref('/dev/ttyUSB0')
+const devicePath = ref('/dev/ttyS3')
 const baudRates = ref([9600, 19200, 38400, 57600, 115200, 230400, 460800])
 const baudRateIndex = ref(4) // 默认 115200
+
+// 常用串口快捷列表（方便切换测试）
+const quickPorts = ref([
+  '/dev/ttyS0',
+  '/dev/ttyS1', 
+  '/dev/ttyS2',
+  '/dev/ttyS3',
+  '/dev/ttyS4',
+  '/dev/ttyS5',
+  '/dev/ttyS9'
+])
 const isConnected = ref(false)
 const sendData = ref('')
 const receivedMessages = ref([])
@@ -834,5 +856,23 @@ const formatTime = (timestamp) => {
   font-weight: bold;
   color: #667eea;
   display: block;
+}
+
+/* 快捷串口选择按钮 */
+.quick-port-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 20rpx;
+  gap: 10rpx;
+}
+
+.quick-port-buttons .btn-small {
+  min-width: 80rpx;
+}
+
+.btn-active {
+  background-color: #667eea !important;
+  color: #fff !important;
 }
 </style>

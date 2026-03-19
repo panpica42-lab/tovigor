@@ -4,7 +4,7 @@
  * 使用场景：产品使用说明、视频教程引导
  -->
 <template>
-	<ModalContainer 
+	<ModalBase 
 		:visible="visible"
 		@update:visible="$emit('update:visible', $event)"
 		:width="690"
@@ -91,12 +91,12 @@
 				</view>
 			</view>
 		</view>
-	</ModalContainer>
+	</ModalBase>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
-import ModalContainer from './modal-container.vue'
+import ModalBase from './modal-base.vue'
 
 // Props
 const props = defineProps({

@@ -120,7 +120,7 @@
 		</view>
 		
 		<!-- 训练安全须知弹窗 -->
-		<ModalGeneral 
+		<ModalDialog 
 			v-model:show="showSafetyModal" 
 			title="训练安全须知"
 			confirm-text="我知道了"
@@ -133,7 +133,7 @@
 				<view class="safety-item">4. 请勿用硬物击打设备屏幕</view>
 				<view class="safety-item">5. 结束训练后，请及时将力臂还原至初始状态并锁好</view>
 			</view>
-		</ModalGeneral>
+		</ModalDialog>
 	</view>
 </template>
 

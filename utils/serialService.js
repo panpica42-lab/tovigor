@@ -89,7 +89,7 @@ const FORCE_MODE = {
   ROPE_B1: 7     // 绳索B1
 }
 
-const READ_INTERVAL = 50      // 轮询间隔(ms)
+const READ_INTERVAL = 100     // 轮询间隔(ms) - 10Hz，配合 5Hz 发包绑绑有余
 const READ_TIMEOUT = 30       // 读取超时(ms)
 const READ_LENGTH = 96        // 单次读取字节数
 

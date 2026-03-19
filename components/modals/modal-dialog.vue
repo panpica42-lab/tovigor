@@ -32,7 +32,7 @@
 
 <script>
 export default {
-  name: 'ModalGeneral',
+  name: 'ModalDialog',
   props: {
     // 是否显示
     show: {

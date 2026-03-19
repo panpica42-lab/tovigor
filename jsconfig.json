@@ -34,7 +34,6 @@
     "nativeplugins"
   ],
   "vueCompilerOptions": {
-    "target": 3,
-    "globalTypesPath": "./uni-app.d.ts"
+    "target": 3
   }
 }

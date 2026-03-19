@@ -73,8 +73,14 @@
 		<!-- 底部控制区 -->
 		<view class="bottom-panel" :class="{ 'panel-transparent': gameStarted && !gameOver }">
 			<!-- 游戏未开始时显示开始按钮 -->
-			<view v-if="!gameStarted && !gameOver" class="start-btn" @click.stop="startGame">
+			<view v-if="!gameStarted && !gameOver && countdown === 0" class="start-btn" @click.stop="startCountdown">
 				<text class="start-btn-text">开始游戏</text>
+			</view>
+			
+			<!-- 倒计时显示 -->
+			<view v-if="countdown > 0" class="countdown-display">
+				<text class="countdown-text">{{ countdown }}</text>
+				<text class="countdown-hint">准备好把手...</text>
 			</view>
 			
 			<!-- 游戏结束时显示结果 -->
@@ -91,10 +97,9 @@
 		
 		<!-- 调试面板（开发时使用） -->
 		<view v-if="DEBUG_PANEL" class="debug-panel">
-			<text class="debug-text">birdY: {{ Math.round(birdY) }}</text>
-			<text class="debug-text">velocity: {{ Math.round(birdVelocity * 100) / 100 }}</text>
-			<text class="debug-text">force: {{ currentForce }}</text>
-			<text class="debug-text">pipes: {{ pipes.length }}</text>
+			<text class="debug-text">mode: {{ inputMode }}</text>
+			<text class="debug-text">force: {{ currentForce.toFixed(1) }} kg</text>
+			<text class="debug-text">sportCount: {{ debugSportCount }}</text>
 		</view>
 	</view>
 </template>
@@ -102,17 +107,22 @@
 <script setup>
 import { ref, shallowRef, triggerRef, onMounted, onUnmounted, computed } from 'vue'
 import { onBackPress } from '@dcloudio/uni-app'
+import { on, off, startWorking, stopWorking, sendOnce, getStatus, FORCE_MODE } from '@/utils/serialService.js'
 
 // ==================== 配置常量 ====================
 const DEBUG_PANEL = true  // 调试面板开关，发布时改为 false
+const NO_PIPE_MODE = true  // 无管道模式：专注测试力量手感，不生成管道
+const COUNTDOWN_SECONDS = 5  // 开始前倒计时秒数，给用户时间准备把手
+//const INPUT_MODE = 'simulate'  // 输入模式：'simulate' = 点击模拟 | 'serial' = 串口力量值
+const INPUT_MODE = 'serial'
 
-// 输入模式：'simulate' = 点击模拟 | 'serial' = 串口力量值
-const inputMode = ref('simulate')
+// 运行时状态（基于配置常量）
+const inputMode = ref(INPUT_MODE)
 
 // 游戏物理参数（固定值）
-const GRAVITY = 0.4          // 重力加速度（每帧下落速度增量）
-const JUMP_FORCE = -8        // 跳跃初速度（负值向上）
-const MAX_FALL_SPEED = 10    // 最大下落速度
+const GRAVITY = 0.4          // 重力加速度（每帧速度增量，值越大下落加速越快）
+const JUMP_FORCE = -12       // 跳跃初速度（负值向上，绝对值越大跳得越高）
+const MAX_FALL_SPEED = 6     // 最大下落速度上限（值越大允许下落越快，限制下落不会无限加速）
 const BIRD_SIZE = 50         // 小鸟尺寸（像素）
 const PIPE_WIDTH = 60        // 管道宽度（像素）- 头部宽度
 const GROUND_RATIO = 0.20    // 地面占屏幕高度比例（20%）
@@ -125,6 +135,7 @@ let PIPE_SPAWN_DISTANCE = 300  // 管道生成间距（像素）
 // ==================== 游戏状态 ====================
 const gameStarted = ref(false)
 const gameOver = ref(false)
+const countdown = ref(0)      // 倒计时（秒），0 表示未在倒计时
 const score = ref(0)
 const gameTime = ref(0)       // 游戏时间（秒）
 
@@ -140,11 +151,12 @@ const birdRotation = computed(() => {
 const pipes = shallowRef([])
 let pipeIdCounter = 0
 
-// 游戏循环时间控制
-let lastFrameTime = 0
-
 // 力量输入
 const currentForce = ref(0)
+
+// 串口状态
+let lastSportCount = -1  // 上次的运动次数（-1 表示未初始化，第一帧只同步不跳跃）
+const debugSportCount = ref(0)  // 调试显示用
 
 // 游戏区域尺寸
 const gameAreaHeight = ref(500)
@@ -153,6 +165,7 @@ const gameAreaWidth = ref(375)
 // 定时器
 let gameLoop = null
 let timeCounter = null
+let countdownTimer = null  // 倒计时定时器
 
 // ==================== 生命周期 ====================
 onMounted(() => {
@@ -167,21 +180,25 @@ onMounted(() => {
 	gameAreaHeight.value = H - groundHeight
 	
 	// 基于屏幕尺寸计算游戏参数
-	// 管道移动速度：0.24W/s，转换为像素/帧（60fps）
-	PIPE_SPEED = (0.24 * W) / 60
+	// 管道移动速度：0.18W/s，转换为像素/帧（60fps）- 慢速更简单
+	PIPE_SPEED = (0.18 * W) / 60
 	// 管道缺口高度：0.40H（基于游戏区域高度）- 更宽松
 	PIPE_GAP = 0.40 * gameAreaHeight.value
-	// 管道生成间距：0.68W
-	PIPE_SPAWN_DISTANCE = 0.68 * W
+	// 管道生成间距：0.85W - 间距大更简单
+	PIPE_SPAWN_DISTANCE = 0.85 * W
 	
 	console.log(`游戏参数 - 速度: ${PIPE_SPEED.toFixed(2)}px/帧, 缺口: ${PIPE_GAP.toFixed(0)}px, 间距: ${PIPE_SPAWN_DISTANCE.toFixed(0)}px`)
 	
 	// 初始化小鸟位置（垂直居中偏上）
 	birdY.value = gameAreaHeight.value / 2 - BIRD_SIZE / 2 - 50
+	
+	// 订阅串口帧事件（无论什么模式都订阅，方便切换调试）
+	on('frame', handleSerialFrame)
 })
 
 onUnmounted(() => {
 	stopGame()
+	off('frame', handleSerialFrame)  // 取消订阅
 })
 
 onBackPress(() => {
@@ -193,6 +210,26 @@ onBackPress(() => {
 })
 
 // ==================== 游戏控制 ====================
+// 开始倒计时（点击按钮后先倒计时）
+const startCountdown = () => {
+	countdown.value = COUNTDOWN_SECONDS
+	
+	// 串口模式：提前启动工作状态，让用户在倒计时期间感受力量
+	if (inputMode.value === 'serial') {
+		startWorking(10, FORCE_MODE.CONST, 200)
+		console.log('[FlappyBird] 倒计时开始，串口已启动')
+	}
+	
+	countdownTimer = setInterval(() => {
+		countdown.value--
+		if (countdown.value <= 0) {
+			clearInterval(countdownTimer)
+			countdownTimer = null
+			startGame()  // 倒计时结束，正式开始
+		}
+	}, 1000)
+}
+
 const startGame = () => {
 	gameStarted.value = true
 	gameOver.value = false
@@ -201,24 +238,16 @@ const startGame = () => {
 	pipes.value = []
 	birdY.value = gameAreaHeight.value / 2 - BIRD_SIZE / 2
 	birdVelocity.value = 0
-	lastFrameTime = 0
+	lastSportCount = -1  // 重置为未初始化，第一帧只同步不跳跃
 	
-	// 启动游戏循环（requestAnimationFrame 更流畅）
-	const gameLoopRAF = (currentTime) => {
-		if (!gameStarted.value || gameOver.value) return
-		
-		// 控制帧率约 60fps
-		if (lastFrameTime === 0) lastFrameTime = currentTime
-		const deltaTime = currentTime - lastFrameTime
-		
-		if (deltaTime >= 16) {  // ~60fps
-			lastFrameTime = currentTime
-			updateGame()
-		}
-		
-		gameLoop = requestAnimationFrame(gameLoopRAF)
+	// 串口模式：如果不是从倒计时来的，需要启动工作状态
+	if (inputMode.value === 'serial' && !countdownTimer) {
+		startWorking(10, FORCE_MODE.CONST, 200)
+		console.log('[FlappyBird] 串口工作状态已启动')
 	}
-	gameLoop = requestAnimationFrame(gameLoopRAF)
+	
+	// 启动游戏循环（uni-app App 环境不支持 requestAnimationFrame，使用 setInterval）
+	gameLoop = setInterval(updateGame, 16)  // ~60fps
 	
 	// 启动计时器
 	timeCounter = setInterval(() => {
@@ -228,12 +257,19 @@ const startGame = () => {
 
 const stopGame = () => {
 	if (gameLoop) {
-		cancelAnimationFrame(gameLoop)
+		clearInterval(gameLoop)
 		gameLoop = null
 	}
 	if (timeCounter) {
 		clearInterval(timeCounter)
 		timeCounter = null
+	}
+	
+	// 串口模式：关闭力量 + 停止工作状态
+	if (inputMode.value === 'serial') {
+		sendOnce(5, FORCE_MODE.OFF)  // 模式0 + 力量5 = 正常关闭（非紧急停车）
+		stopWorking()
+		console.log('[FlappyBird] 力量已关闭，串口工作状态已停止')
 	}
 }
 
@@ -309,12 +345,14 @@ const updateGame = () => {
 		}
 	}
 	
-	// 6. 基于距离生成新管道
-	const lastPipe = pipeArray[pipeArray.length - 1]
-	const shouldSpawn = !lastPipe || (gameAreaWidth.value - lastPipe.x >= PIPE_SPAWN_DISTANCE)
-	if (shouldSpawn) {
-		spawnPipe()
-		needTrigger = true
+	// 6. 基于距离生成新管道（无管道模式下跳过）
+	if (!NO_PIPE_MODE) {
+		const lastPipe = pipeArray[pipeArray.length - 1]
+		const shouldSpawn = !lastPipe || (gameAreaWidth.value - lastPipe.x >= PIPE_SPAWN_DISTANCE)
+		if (shouldSpawn) {
+			spawnPipe()
+			needTrigger = true
+		}
 	}
 	
 	// 7. 手动触发管道数组更新（减少响应式开销）
@@ -356,17 +394,36 @@ const jump = () => {
 	birdVelocity.value = JUMP_FORCE
 }
 
-// 串口模式下的力量输入处理（预留接口）
-const handleForceInput = (force) => {
+// ==================== 串口帧处理 ====================
+/**
+ * 处理串口上行帧（A9 帧）
+ * 检测 sportCount 变化触发跳跃
+ * 
+ * TODO: 可选增强 - 根据 instantForce 微调跳跃力度
+ */
+const handleSerialFrame = (data) => {
 	if (!gameStarted.value || gameOver.value) return
+	if (data.parsed.type !== 'A9') return  // 只处理上行帧
 	
-	currentForce.value = force
+	const currentSportCount = data.parsed.sportCount
 	
-	// 力量值超过阈值时跳跃
-	if (force > 20) {
-		// 力量越大，跳跃越高
-		const jumpPower = JUMP_FORCE * (0.5 + (force / 100) * 0.8)
-		birdVelocity.value = Math.max(jumpPower, JUMP_FORCE * 1.5)
+	// 更新调试显示
+	debugSportCount.value = currentSportCount
+	currentForce.value = Math.max(
+		data.parsed.left.instantForce,
+		data.parsed.right.instantForce
+	)
+	
+	// 检测运动次数变化
+	if (lastSportCount === -1) {
+		// 第一帧：只同步基准值，不触发跳跃
+		lastSportCount = currentSportCount
+		console.log('[FlappyBird] 初始化 sportCount 基准:', currentSportCount)
+	} else if (currentSportCount > lastSportCount) {
+		// 后续帧：检测变化触发跳跃
+		console.log('[FlappyBird] sportCount 变化:', lastSportCount, '->', currentSportCount)
+		jump()
+		lastSportCount = currentSportCount
 	}
 }
 
@@ -382,12 +439,6 @@ const goBack = () => {
 	stopGame()
 	uni.navigateBack()
 }
-
-// ==================== 暴露给外部的接口（串口模式用） ====================
-defineExpose({
-	handleForceInput,
-	inputMode
-})
 </script>
 
 <style scoped>
@@ -618,6 +669,27 @@ defineExpose({
 	font-size: 32rpx;
 	font-weight: bold;
 	color: #FFFFFF;
+}
+
+/* 倒计时显示 */
+.countdown-display {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 20rpx;
+}
+
+.countdown-text {
+	font-size: 200rpx;
+	font-weight: bold;
+	color: #4CAF50;
+	text-shadow: 4rpx 4rpx 8rpx rgba(0, 0, 0, 0.3);
+	line-height: 1;
+}
+
+.countdown-hint {
+	font-size: 32rpx;
+	color: #666;
 }
 
 .force-hint {

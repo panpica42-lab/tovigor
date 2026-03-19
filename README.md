@@ -69,8 +69,8 @@ tovigor_v1/
 | 组件名 | 说明 | 主要功能 |
 |--------|------|----------|
 | `modal-container-light.vue` | 轻量级弹窗容器 | 仅提供遮罩层，无预设样式，完全自定义 |
-| `modal-container.vue` | 通用弹窗容器 | 提供位置(center/top/bottom)、动画(fade/slide/zoom)、遮罩等配置 |
-| `modal-general.vue` | 通用业务弹窗 | 适用于确认框、提示框等常见场景 |
+| `modal-base.vue` | 基础弹窗容器 | 提供遮罩+居中盒子，样式可配置 |
+| `modal-dialog.vue` | 对话框弹窗 | 完整对话框结构（标题+内容+按钮），适用于确认框、提示框 |
 | `usage-guide-modal.vue` | 使用指南弹窗 | 产品使用说明、视频教程列表 |
 | `coach-detail-modal.vue` | AI教练详情弹窗 | 展示教练信息，支持切换教练 |
 | `assessment-complete-modal.vue` | 评估完成弹窗 | 评估完成提示，带自动倒计时跳转 |
@@ -78,7 +78,7 @@ tovigor_v1/
 弹窗组件层级关系：
 ```
 ModalContainerLight（极简容器）
-  → ModalContainer（配置化容器）
+  → ModalBase（基础容器）
     → 业务弹窗组件
 ```
 

@@ -45,6 +45,15 @@
 			}
 		},
 		{
+			"path": "pages/freeTraining/selected-action",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
 			"path": "pages/freeTraining/free-training",
 			"style": {
 				"navigationBarTitleText": "",
@@ -182,6 +191,8 @@
 		"navigationBarTextStyle": "black",
 		"navigationBarTitleText": "Tovigor健身",
 		"navigationBarBackgroundColor": "#F8F8F8",
-		"backgroundColor": "#F8F8F8"
+		"backgroundColor": "#F8F8F8",
+		"disableScroll": true,
+		"bounce": "none"
 	}
 }

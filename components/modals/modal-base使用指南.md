@@ -1,9 +1,9 @@
 ﻿<!-- markdownlint-disable -->
-# ModalContainer 通用弹窗组件使用指南
+# ModalBase 基础弹窗容器使用指南
 
 ## 📦 组件概述
 
-`modal-container.vue` 是一个高度灵活的通用弹窗容器组件，负责弹窗的**容器逻辑**（遮罩、动画、显示/隐藏、位置、样式配置），不包含任何具体业务内容。所有内容通过**插槽**完全自定义。
+`modal-base.vue` 是一个简洁的基础弹窗容器组件，提供**遮罩层 + 居中弹窗盒子 + 淡入动画**，不包含任何具体业务内容。所有内容通过**插槽**完全自定义。
 
 ---
 
@@ -61,17 +61,17 @@
   <view>
     <button @click="showModal = true">打开弹窗</button>
     
-    <ModalContainer v-model:visible="showModal">
+    <ModalBase v-model:visible="showModal">
       <view style="padding: 40rpx;">
         <text>这是一个简单的弹窗内容</text>
       </view>
-    </ModalContainer>
+    </ModalBase>
   </view>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import ModalContainer from '@/components/modal-container.vue'
+import ModalBase from '@/components/modals/modal-base.vue'
 
 const showModal = ref(false)
 </script>
@@ -79,11 +79,10 @@ const showModal = ref(false)
 
 ### 示例 2：使用插槽的完整弹窗
 ```vue
-<ModalContainer 
+<ModalBase 
   v-model:visible="showModal"
   :width="650"
   :border-radius="32"
-  animation="zoom"
 >
   <!-- 头部 -->
   <template #header>
@@ -105,60 +104,47 @@ const showModal = ref(false)
       <button @click="handleConfirm">确定</button>
     </view>
   </template>
-</ModalContainer>
+</ModalBase>
 ```
 
 ### 示例 3：底部抽屉弹窗
 ```vue
-<ModalContainer 
+<ModalBase 
   v-model:visible="showDrawer"
-  position="bottom"
-  animation="slide"
   :width="750"
   :border-radius="32"
-  :max-height="800"
 >
   <view class="drawer-content">
     <text>从底部滑出的抽屉内容</text>
   </view>
-</ModalContainer>
+</ModalBase>
 ```
 
 ### 示例 4：监听事件
 ```vue
-<ModalContainer 
+<ModalBase 
   v-model:visible="showModal"
-  @open="handleOpen"
   @close="handleClose"
-  @overlay-click="handleOverlayClick"
 >
   <view>内容</view>
-</ModalContainer>
+</ModalBase>
 
 <script setup>
-const handleOpen = () => {
-  console.log('弹窗打开了')
-}
-
 const handleClose = () => {
   console.log('弹窗关闭了')
-}
-
-const handleOverlayClick = () => {
-  console.log('点击了遮罩层')
 }
 </script>
 ```
 
 ---
 
-## 🚀 如何基于 ModalContainer 创建业务弹窗
+## 🚀 如何基于 ModalBase 创建业务弹窗
 
 ### 方法 1：直接组合使用（推荐简单场景）
-直接在页面中使用 `ModalContainer` + 自定义内容：
+直接在页面中使用 `ModalBase` + 自定义内容：
 
 ```vue
-<ModalContainer v-model:visible="showConfirm" animation="zoom">
+<ModalBase v-model:visible="showConfirm">
   <view class="my-confirm-modal">
     <text class="title">{{ title }}</text>
     <text class="content">{{ content }}</text>
@@ -167,18 +153,17 @@ const handleOverlayClick = () => {
       <button @click="handleConfirm">确定</button>
     </view>
   </view>
-</ModalContainer>
+</ModalBase>
 ```
 
 ### 方法 2：封装成独立业务组件（推荐复用场景）
-创建 `confirm-modal.vue` 封装 ModalContainer：
+创建 `confirm-modal.vue` 封装 ModalBase：
 
 ```vue
 <!-- components/confirm-modal.vue -->
 <template>
-  <ModalContainer 
+  <ModalBase 
     v-model:visible="visible"
-    animation="zoom"
     :width="600"
     @close="handleClose"
   >
@@ -190,11 +175,11 @@ const handleOverlayClick = () => {
         <button class="btn-confirm" @click="handleConfirm">确定</button>
       </view>
     </view>
-  </ModalContainer>
+  </ModalBase>
 </template>
 
 <script setup>
-import ModalContainer from './modal-container.vue'
+import ModalBase from './modal-base.vue'
 
 const props = defineProps({
   visible: Boolean,
@@ -249,10 +234,10 @@ const handleClose = () => {
 
 ### 场景 1：快速实现简单弹窗
 **你的指令：**
-> "基于 ModalContainer 帮我创建一个确认删除弹窗，包含标题、内容文字、确定和取消按钮。直接写在当前页面中使用，不需要单独封装组件。"
+> "基于 ModalBase 帮我创建一个确认删除弹窗，包含标题、内容文字、确定和取消按钮。直接写在当前页面中使用，不需要单独封装组件。"
 
 **AI 会做什么：**
-- 在当前页面添加 `<ModalContainer>` 使用代码
+- 在当前页面添加 `<ModalBase>` 使用代码
 - 添加自定义内容结构（标题、内容、按钮）
 - 添加对应的样式和事件处理逻辑
 
@@ -260,11 +245,11 @@ const handleClose = () => {
 
 ### 场景 2：封装可复用的业务组件
 **你的指令：**
-> "基于 ModalContainer 封装一个通用的确认弹窗组件 `confirm-modal.vue`，支持传入 title、content、confirmText、cancelText 等参数，有确认和取消两个事件。组件放在 components 目录。"
+> "基于 ModalBase 封装一个通用的确认弹窗组件 `confirm-modal.vue`，支持传入 title、content、confirmText、cancelText 等参数，有确认和取消两个事件。组件放在 components 目录。"
 
 **AI 会做什么：**
 1. 创建 `components/confirm-modal.vue` 文件
-2. 内部使用 `<ModalContainer>` 作为容器
+2. 内部使用 `<ModalBase>` 作为容器
 3. 实现 props、emits、样式
 4. 提供使用示例代码
 
@@ -301,7 +286,7 @@ const handleClose = () => {
 
 ### 创建新弹窗组件
 ```
-基于 ModalContainer 创建一个 [业务名称] 弹窗组件 [文件名.vue]：
+基于 ModalBase 创建一个 [业务名称] 弹窗组件 [文件名.vue]：
 - 布局：[描述布局结构]
 - 功能：[列出功能点]
 - 参数：[需要传入的参数]
@@ -319,7 +304,7 @@ const handleClose = () => {
 
 ### 快速使用（不封装）
 ```
-在当前页面使用 ModalContainer 实现一个 [功能描述] 弹窗，
+在当前页面使用 ModalBase 实现一个 [功能描述] 弹窗，
 包含 [内容列表]，样式要求 [样式描述]。
 ```
 
@@ -327,7 +312,7 @@ const handleClose = () => {
 
 ## 💡 最佳实践建议
 
-### 1. 何时直接使用 ModalContainer
+### 1. 何时直接使用 ModalBase
 - ✅ 页面中只用一次的弹窗
 - ✅ 结构简单的临时弹窗
 - ✅ 快速原型验证
@@ -343,9 +328,9 @@ const handleClose = () => {
 
 ### 4. 组件层级
 ```
-ModalContainer（通用容器）
+ModalBase（基础容器）
   ↓
-StandardModal（标准对话框：标题+内容+按钮）
+ModalDialog（对话框：标题+内容+按钮）
   ↓
 ConfirmModal / AlertModal / FormModal（具体业务弹窗）
   ↓
@@ -359,27 +344,27 @@ AssessmentCompleteModal / OrderDetailModal（页面专用弹窗）
 ### Q1：弹窗内容太长怎么办？
 设置 `max-height` 属性，内容会自动滚动：
 ```vue
-<ModalContainer :max-height="1000">
+<ModalBase :max-height="1000">
   <!-- 长内容 -->
-</ModalContainer>
+</ModalBase>
 ```
 
 ### Q2：如何禁止点击遮罩关闭？
 设置 `close-on-click-overlay` 为 `false`：
 ```vue
-<ModalContainer :close-on-click-overlay="false">
+<ModalBase :close-on-click-overlay="false">
 ```
 
 ### Q3：如何自定义遮罩透明度？
 ```vue
-<ModalContainer :overlay-opacity="0.7">
+<ModalBase :overlay-opacity="0.7">
 ```
 
 ### Q4：如何实现多层弹窗？
 设置不同的 `z-index`：
 ```vue
-<ModalContainer :z-index="9999">第一层</ModalContainer>
-<ModalContainer :z-index="10000">第二层</ModalContainer>
+<ModalBase :z-index="9999">第一层</ModalBase>
+<ModalBase :z-index="10000">第二层</ModalBase>
 ```
 
 ### Q5：已有的弹窗组件（如 assessment-complete-modal）需要改成基于 ModalContainer 吗？

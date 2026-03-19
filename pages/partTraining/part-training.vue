@@ -60,7 +60,7 @@
 <script setup>
 import { ref } from 'vue'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
-import TrainingFilterSidebar from './components/training-filter-sidebar.vue'
+import TrainingFilterSidebar from '@/components/ui-box/training-filter-sidebar.vue'
 import TrainingCourseCard from '@/components/course-list/training-course-card.vue'
 
 const searchKeyword = ref('')
@@ -294,15 +294,5 @@ const handleFilterChange = (data) => {
 
 .course-item {
 	width: calc(50% - 12rpx);
-}
-</style>
-
-<style>
-/* 强制禁止页面滚动 - 全局样式 */
-page {
-	height: 100% ;
-	overflow: hidden !;
-	position: fixed ;
-	width: 100% ;
 }
 </style>

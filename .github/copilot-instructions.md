@@ -160,6 +160,19 @@ onBeforeUnmount(() => {
 | 6 | 平衡 |
 | 7 | 绳索B1 |
 
+#### ⚠️ 力量控制重要规则
+
+| 场景 | forceMode | force | 说明 |
+|------|-----------|-------|------|
+| **关闭力量** | 0 | **非0**（默认5） | 正常关闭，绳子松开 |
+| **紧急停车** | 0 | **0** | 硬件级紧急停车，慎用！ |
+
+**关闭力量的正确写法**：
+```javascript
+sendOnce(5, FORCE_MODE.OFF)  // ✅ 模式0 + 力量5 = 正常关闭
+sendOnce(0, FORCE_MODE.OFF)  // ❌ 模式0 + 力量0 = 紧急停车！
+```
+
 #### CRC 算法（特殊口径）
 
 ```javascript
@@ -284,15 +297,15 @@ adb shell chmod 666 /dev/ttyS3
 
 ### 文件命名
 - 页面目录: 小驼峰或短横线（`freeTraining/`、`body-strength-assess/`）
-- 组件: 短横线（`modal-general.vue`、`bubble-dialog-box.vue`）
+- 组件: 短横线（`modal-dialog.vue`、`bubble-dialog-box.vue`）
 - 静态资源: 下划线（`ic_power.svg`、`bg_stat_board.png`）
 
 ## 弹窗组件使用
 
-### modal-general.vue（通用弹窗）
+### modal-dialog.vue（对话框弹窗）
 
 ```vue
-<ModalGeneral 
+<ModalDialog 
   v-model:show="showModal"
   title="提示"
   confirmText="确定"
@@ -300,7 +313,7 @@ adb shell chmod 666 /dev/ttyS3
   @cancel="handleCancel"
 >
   <text>弹窗内容</text>
-</ModalGeneral>
+</ModalDialog>
 ```
 
 ### 浮动关闭按钮模式

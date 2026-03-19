@@ -1,7 +1,7 @@
 <!--
  * 训练筛选侧边栏组件
  * 功能：左侧垂直筛选栏，包含 AI 推荐头像和多个筛选项
- * 使用场景：部位训练页面的私有组件
+ * 使用场景：部位训练、动作库等需要筛选功能的页面
  -->
 <template>
 	<view class="sidebar">
@@ -17,174 +17,168 @@
 			</view>
 		</view>
 
-		<!-- 筛选项列表 -->
-		<scroll-view
-			class="filter-scroll"
-			scroll-y
-			:show-scrollbar="false"
-		>
-			<view class="filter-list">
+		<!-- 筛选项列表（不需要滚动，内容不会超出屏幕） -->
+		<view class="filter-list">
 
-				<!-- 筛选 - 不可点击的标题 -->
-				<view class="filter-title">
-					<text class="filter-title-text">筛选</text>
-				</view>
-
-				<!-- 性别 -->
-				<filter-pill
-					label="性别"
-					:active="expanded.gender"
-					:showArrow="true"
-					@click="toggleSection('gender')"
-				/>
-				<view v-if="expanded.gender" class="filter-options">
-					<view
-						v-for="option in genderOptions"
-						:key="option.value"
-						class="option-chip"
-						:class="{ 'option-chip--active': isOptionActive('gender', option.value) }"
-						@click="onOptionClick('gender', option)"
-					>
-						<text class="option-text">{{ option.label }}</text>
-					</view>
-				</view>
-
-				<!-- 目的 -->
-				<filter-pill
-					label="目的"
-					:active="expanded.goal"
-					:showArrow="true"
-					@click="toggleSection('goal')"
-				/>
-				<view v-if="expanded.goal" class="filter-options">
-					<view
-						v-for="option in goalOptions"
-						:key="option.value"
-						class="option-chip"
-						:class="{ 'option-chip--active': isOptionActive('goal', option.value) }"
-						@click="onOptionClick('goal', option)"
-					>
-						<text class="option-text">{{ option.label }}</text>
-					</view>
-				</view>
-
-				<!-- 难度 -->
-				<filter-pill
-					label="难度"
-					:active="expanded.level"
-					:showArrow="true"
-					@click="toggleSection('level')"
-				/>
-				<view v-if="expanded.level" class="filter-options">
-					<view
-						v-for="option in levelOptions"
-						:key="option.value"
-						class="option-chip"
-						:class="{ 'option-chip--active': isOptionActive('level', option.value) }"
-						@click="onOptionClick('level', option)"
-					>
-						<text class="option-text">{{ option.label }}</text>
-					</view>
-				</view>
-
-				<!-- 部位 -->
-				<filter-pill
-					label="部位"
-					:active="expanded.part"
-					:showArrow="true"
-					@click="toggleSection('part')"
-				/>
-				<view v-if="expanded.part" class="filter-options">
-					<view
-						v-for="option in partOptions"
-						:key="option.value"
-						class="option-chip"
-						:class="{ 'option-chip--active': isOptionActive('part', option.value) }"
-						@click="onOptionClick('part', option)"
-					>
-						<text class="option-text">{{ option.label }}</text>
-					</view>
-				</view>
-
-				<!-- 训练方式 -->
-				<filter-pill
-					label="训练方式"
-					:active="expanded.method"
-					:showArrow="true"
-					@click="toggleSection('method')"
-				/>
-				<view v-if="expanded.method" class="filter-options">
-					<view
-						v-for="option in methodOptions"
-						:key="option.value"
-						class="option-chip"
-						:class="{ 'option-chip--active': isOptionActive('method', option.value) }"
-						@click="onOptionClick('method', option)"
-					>
-						<text class="option-text">{{ option.label }}</text>
-					</view>
-				</view>
-
-				<!-- 时长 -->
-				<filter-pill
-					label="时长"
-					:active="expanded.duration"
-					:showArrow="true"
-					@click="toggleSection('duration')"
-				/>
-				<view v-if="expanded.duration" class="filter-options">
-					<view
-						v-for="option in durationOptions"
-						:key="option.value"
-						class="option-chip"
-						:class="{ 'option-chip--active': isOptionActive('duration', option.value) }"
-						@click="onOptionClick('duration', option)"
-					>
-						<text class="option-text">{{ option.label }}</text>
-					</view>
-				</view>
-
-				<!-- 配件 -->
-				<filter-pill
-					label="配件"
-					:active="expanded.equipment"
-					:showArrow="true"
-					@click="toggleSection('equipment')"
-				/>
-				<view v-if="expanded.equipment" class="filter-options">
-					<view
-						v-for="option in equipmentOptions"
-						:key="option.value"
-						class="option-chip"
-						:class="{ 'option-chip--active': isOptionActive('equipment', option.value) }"
-						@click="onOptionClick('equipment', option)"
-					>
-						<text class="option-text">{{ option.label }}</text>
-					</view>
-				</view>
-
-				<!-- AI教练 -->
-				<filter-pill
-					label="AI教练"
-					:active="expanded.coach"
-					:showArrow="true"
-					@click="toggleSection('coach')"
-				/>
-				<view v-if="expanded.coach" class="coach-options">
-					<view
-						v-for="coach in coachOptions"
-						:key="coach.value"
-						class="coach-card"
-						:class="{ 'coach-card--active': isOptionActive('coach', coach.value) }"
-						@click="onOptionClick('coach', coach)"
-					>
-						<image class="coach-avatar" :src="coach.avatar" mode="aspectFit" />
-						<text class="coach-name">{{ coach.label }}</text>
-					</view>
-				</view>
-
+			<!-- 筛选 - 不可点击的标题 -->
+			<view class="filter-title">
+				<text class="filter-title-text">筛选</text>
 			</view>
-		</scroll-view>
+
+			<!-- 性别 -->
+			<filter-pill
+				label="性别"
+				:active="expanded.gender"
+				:showArrow="true"
+				@click="toggleSection('gender')"
+			/>
+			<view v-if="expanded.gender" class="filter-options">
+				<view
+					v-for="option in genderOptions"
+					:key="option.value"
+					class="option-chip"
+					:class="{ 'option-chip--active': isOptionActive('gender', option.value) }"
+					@click="onOptionClick('gender', option)"
+				>
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<!-- 目的 -->
+			<filter-pill
+				label="目的"
+				:active="expanded.goal"
+				:showArrow="true"
+				@click="toggleSection('goal')"
+			/>
+			<view v-if="expanded.goal" class="filter-options">
+				<view
+					v-for="option in goalOptions"
+					:key="option.value"
+					class="option-chip"
+					:class="{ 'option-chip--active': isOptionActive('goal', option.value) }"
+					@click="onOptionClick('goal', option)"
+				>
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<!-- 难度 -->
+			<filter-pill
+				label="难度"
+				:active="expanded.level"
+				:showArrow="true"
+				@click="toggleSection('level')"
+			/>
+			<view v-if="expanded.level" class="filter-options">
+				<view
+					v-for="option in levelOptions"
+					:key="option.value"
+					class="option-chip"
+					:class="{ 'option-chip--active': isOptionActive('level', option.value) }"
+					@click="onOptionClick('level', option)"
+				>
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<!-- 部位 -->
+			<filter-pill
+				label="部位"
+				:active="expanded.part"
+				:showArrow="true"
+				@click="toggleSection('part')"
+			/>
+			<view v-if="expanded.part" class="filter-options">
+				<view
+					v-for="option in partOptions"
+					:key="option.value"
+					class="option-chip"
+					:class="{ 'option-chip--active': isOptionActive('part', option.value) }"
+					@click="onOptionClick('part', option)"
+				>
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<!-- 训练方式 -->
+			<filter-pill
+				label="训练方式"
+				:active="expanded.method"
+				:showArrow="true"
+				@click="toggleSection('method')"
+			/>
+			<view v-if="expanded.method" class="filter-options">
+				<view
+					v-for="option in methodOptions"
+					:key="option.value"
+					class="option-chip"
+					:class="{ 'option-chip--active': isOptionActive('method', option.value) }"
+					@click="onOptionClick('method', option)"
+				>
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<!-- 时长 -->
+			<filter-pill
+				label="时长"
+				:active="expanded.duration"
+				:showArrow="true"
+				@click="toggleSection('duration')"
+			/>
+			<view v-if="expanded.duration" class="filter-options">
+				<view
+					v-for="option in durationOptions"
+					:key="option.value"
+					class="option-chip"
+					:class="{ 'option-chip--active': isOptionActive('duration', option.value) }"
+					@click="onOptionClick('duration', option)"
+				>
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<!-- 配件 -->
+			<filter-pill
+				label="配件"
+				:active="expanded.equipment"
+				:showArrow="true"
+				@click="toggleSection('equipment')"
+			/>
+			<view v-if="expanded.equipment" class="filter-options">
+				<view
+					v-for="option in equipmentOptions"
+					:key="option.value"
+					class="option-chip"
+					:class="{ 'option-chip--active': isOptionActive('equipment', option.value) }"
+					@click="onOptionClick('equipment', option)"
+				>
+					<text class="option-text">{{ option.label }}</text>
+				</view>
+			</view>
+
+			<!-- AI教练 -->
+			<filter-pill
+				label="AI教练"
+				:active="expanded.coach"
+				:showArrow="true"
+				@click="toggleSection('coach')"
+			/>
+			<view v-if="expanded.coach" class="coach-options">
+				<view
+					v-for="coach in coachOptions"
+					:key="coach.value"
+					class="coach-card"
+					:class="{ 'coach-card--active': isOptionActive('coach', coach.value) }"
+					@click="onOptionClick('coach', coach)"
+				>
+					<image class="coach-avatar" :src="coach.avatar" mode="aspectFit" />
+					<text class="coach-name">{{ coach.label }}</text>
+				</view>
+			</view>
+
+		</view>
 		
 		<!-- AI教练详情弹窗 -->
 		<CoachDetailModal
@@ -275,10 +269,10 @@ const methodOptions = [
 ]
 
 const durationOptions = [
-	{ value: '0-15', label: '<15min' },
-	{ value: '15-25', label: '15-25min' },
-	{ value: '25-40', label: '25-40min' },
-	{ value: '40+', label: '>40min' }
+	{ value: '0-15', label: '<15分' },
+	{ value: '15-25', label: '15-25分' },
+	{ value: '25-40', label: '25-40分' },
+	{ value: '40+', label: '>40分' }
 ]
 
 const equipmentOptions = [
@@ -415,7 +409,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .sidebar {
-	width: 200rpx;
+	width: 160rpx;
 	padding: 8rpx 8rpx 12rpx;
 	border-radius: 16rpx;
 	background-color: rgba(243, 244, 246, 0.95);
@@ -462,12 +456,8 @@ onMounted(() => {
 }
 
 /* ========== 筛选列表 ========== */
-.filter-scroll {
-	flex: 1;
-	overflow: hidden;
-}
-
 .filter-list {
+	flex: 1;
 	display: flex;
 	flex-direction: column;
 	gap: 4rpx;
@@ -500,9 +490,9 @@ onMounted(() => {
 }
 
 .option-chip {
-	height: 32rpx;
-	padding: 0 10rpx;
-	border-radius: 16rpx;
+	height: 28rpx;
+	padding: 0 6rpx;
+	border-radius: 14rpx;
 	background: rgba(255, 255, 255, 0.8);
 	display: flex;
 	align-items: center;
@@ -517,7 +507,7 @@ onMounted(() => {
 }
 
 .option-text {
-	font-size: 16rpx;
+	font-size: 14rpx;
 	color: #333333;
 	white-space: nowrap;
 }
