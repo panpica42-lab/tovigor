@@ -1,40 +1,35 @@
 <template>
 	<view class="container">
-		<!-- 顶部导航栏 -->
 		<view class="nav-bar">
-			<image 
-				class="back-btn" 
-				src="/static/icons/general/btn_general_back.svg" 
+			<image
+				class="back-btn"
+				src="/static/icons/general/btn_general_back.svg"
 				mode="aspectFit"
 				@click="goBack"
 			/>
 			<text class="nav-title">动作库</text>
-			<view 
-				class="done-btn" 
+			<view
+				class="done-btn"
 				:class="{ 'done-btn--disabled': selectedCount === 0 }"
 				@click="handleDone"
 			>
 				<text class="done-btn-text">添加完成</text>
-				<!-- 选中数量徽章 -->
 				<view v-if="selectedCount > 0" class="badge">
 					<text class="badge-text">{{ selectedCount }}</text>
 				</view>
 			</view>
 		</view>
 
-		<!-- 主体区域 -->
 		<view class="main-content">
-			<!-- 左侧筛选栏 -->
 			<TrainingFilterSidebar
 				:filters="filters"
 				@changeFilter="handleFilterChange"
 			/>
 
-			<!-- 右侧动作卡片网格 -->
 			<scroll-view class="action-grid-scroll" scroll-y :show-scrollbar="false">
 				<view class="action-grid">
-					<view 
-						v-for="action in filteredActions" 
+					<view
+						v-for="action in filteredActions"
 						:key="action.id"
 						class="action-card-wrapper"
 					>
@@ -49,7 +44,6 @@
 			</scroll-view>
 		</view>
 
-		<!-- 动作详情弹窗 -->
 		<ActionDetailModal
 			v-model:visible="showDetailModal"
 			:action="currentDetailAction"
@@ -57,7 +51,6 @@
 			@select="handleSelectFromModal"
 		/>
 
-		<!-- 自定义轻量提示 -->
 		<CustomToast ref="toastRef" />
 	</view>
 </template>
@@ -69,7 +62,20 @@ import ActionCard from './components/action-card.vue'
 import ActionDetailModal from './components/action-detail-modal.vue'
 import CustomToast from '@/components/modals/custom-toast.vue'
 
-// ========== 筛选状态 ==========
+/*
+ * 动作默认模式预设。
+ * key 给训练页映射到 serialService.FORCE_MODE，
+ * label 给页面显示中文文案。
+ */
+const FORCE_MODE_PRESETS = {
+	CONST: { key: 'CONST', label: '恒力' },
+	CONC_ISO: { key: 'CONC_ISO', label: '向心等张' },
+	ECC_ISO: { key: 'ECC_ISO', label: '离心等张' },
+	FLUID: { key: 'FLUID', label: '流体阻力' },
+	BALANCE: { key: 'BALANCE', label: '等速' },
+	ELASTIC: { key: 'ELASTIC', label: '弹力' }
+}
+
 const filters = ref({
 	gender: [],
 	goal: [],
@@ -81,35 +87,145 @@ const filters = ref({
 	coach: []
 })
 
-// 处理筛选变化
 const handleFilterChange = (payload) => {
 	const { key, values } = payload
 	filters.value[key] = values
 }
 
-// ========== Mock 动作数据 ==========
+/*
+ * 动作库基础数据。
+ * 每个动作对象都直接带着完整配置：
+ * defaultMode: 默认 force mode
+ * defaultResistance: 默认阻力值
+ * recommendedSets / recommendedReps: 建议组数 / 次数
+ */
 const actionList = ref([
-	{ id: 1, name: '低位上拉', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_01.jpg', part: 'back' },
-	{ id: 2, name: '站姿颈后臂屈伸', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_02.jpg', part: 'arm' },
-	{ id: 3, name: '进阶脚环弓步上提', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_03.jpg', part: 'leg' },
-	{ id: 4, name: '站姿交替前平举', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_04.jpg', part: 'shoulder' },
-	{ id: 5, name: '站姿交替弯矩', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_05.jpg', part: 'arm' },
-	{ id: 6, name: '脚环竞上后踢', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_06.jpg', part: 'leg' },
-	{ id: 7, name: '俯身划船', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_01.jpg', part: 'back' },
-	{ id: 8, name: '肩部推举', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_02.jpg', part: 'shoulder' },
-	{ id: 9, name: '胸部飞鸟', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_03.jpg', part: 'chest' },
-	{ id: 10, name: '深蹲提拉', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_04.jpg', part: 'leg' },
-	{ id: 11, name: '背部下拉', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_05.jpg', part: 'back' },
-	{ id: 12, name: '三头肌下压', cover: '/static/icons/freeTrainingActivity/action-library/ic_action_06.jpg', part: 'arm' },
+	{
+		id: 1,
+		name: '低位上拉',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_01.jpg',
+		part: 'back',
+		defaultMode: FORCE_MODE_PRESETS.CONST,
+		defaultResistance: 15,
+		recommendedSets: 4,
+		recommendedReps: 3
+	},
+	{
+		id: 2,
+		name: '站姿颈后臂屈伸',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_02.jpg',
+		part: 'arm',
+		defaultMode: FORCE_MODE_PRESETS.CONST,
+		defaultResistance: 14,
+		recommendedSets: 3,
+		recommendedReps: 10
+	},
+	{
+		id: 3,
+		name: '进阶脚环弓步上提',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_03.jpg',
+		part: 'leg',
+		defaultMode: FORCE_MODE_PRESETS.ELASTIC,
+		defaultResistance: 20,
+		recommendedSets: 3,
+		recommendedReps: 12
+	},
+	{
+		id: 4,
+		name: '站姿交替前平举',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_04.jpg',
+		part: 'shoulder',
+		defaultMode: FORCE_MODE_PRESETS.CONC_ISO,
+		defaultResistance: 12,
+		recommendedSets: 3,
+		recommendedReps: 10
+	},
+	{
+		id: 5,
+		name: '站姿交替弯举',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_05.jpg',
+		part: 'arm',
+		defaultMode: FORCE_MODE_PRESETS.CONST,
+		defaultResistance: 13,
+		recommendedSets: 3,
+		recommendedReps: 12
+	},
+	{
+		id: 6,
+		name: '脚环站立后蹬',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_06.jpg',
+		part: 'leg',
+		defaultMode: FORCE_MODE_PRESETS.FLUID,
+		defaultResistance: 22,
+		recommendedSets: 4,
+		recommendedReps: 10
+	},
+	{
+		id: 7,
+		name: '俯身划船',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_01.jpg',
+		part: 'back',
+		defaultMode: FORCE_MODE_PRESETS.ECC_ISO,
+		defaultResistance: 16,
+		recommendedSets: 4,
+		recommendedReps: 10
+	},
+	{
+		id: 8,
+		name: '肩部推举',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_02.jpg',
+		part: 'shoulder',
+		defaultMode: FORCE_MODE_PRESETS.CONST,
+		defaultResistance: 15,
+		recommendedSets: 3,
+		recommendedReps: 10
+	},
+	{
+		id: 9,
+		name: '胸部飞鸟',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_03.jpg',
+		part: 'chest',
+		defaultMode: FORCE_MODE_PRESETS.ELASTIC,
+		defaultResistance: 12,
+		recommendedSets: 3,
+		recommendedReps: 15
+	},
+	{
+		id: 10,
+		name: '深蹲提拉',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_04.jpg',
+		part: 'leg',
+		defaultMode: FORCE_MODE_PRESETS.BALANCE,
+		defaultResistance: 24,
+		recommendedSets: 4,
+		recommendedReps: 8
+	},
+	{
+		id: 11,
+		name: '背部下拉',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_05.jpg',
+		part: 'back',
+		defaultMode: FORCE_MODE_PRESETS.FLUID,
+		defaultResistance: 18,
+		recommendedSets: 4,
+		recommendedReps: 12
+	},
+	{
+		id: 12,
+		name: '三头肌下压',
+		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_06.jpg',
+		part: 'arm',
+		defaultMode: FORCE_MODE_PRESETS.CONC_ISO,
+		defaultResistance: 11,
+		recommendedSets: 3,
+		recommendedReps: 12
+	}
 ])
 
-// 根据筛选条件过滤动作（简化版，仅演示）
 const filteredActions = computed(() => {
-	// 暂时不做实际筛选，返回全部
 	return actionList.value
 })
 
-// ========== 选择状态 ==========
 const selectedIds = ref([])
 
 const isSelected = (id) => {
@@ -125,34 +241,24 @@ const toggleSelect = (id) => {
 	}
 }
 
-// 选中数量
 const selectedCount = computed(() => selectedIds.value.length)
 
-// ========== 详情弹窗状态 ==========
 const showDetailModal = ref(false)
 const currentDetailAction = ref(null)
-
-// ========== 自定义提示 ==========
 const toastRef = ref(null)
 
-// ========== 事件处理 ==========
-// 返回上一页
 const goBack = () => {
 	uni.navigateBack()
 }
 
-// 添加完成
 const handleDone = () => {
-	// 校验：至少选择一个动作
 	if (selectedIds.value.length === 0) {
 		toastRef.value?.show('请先选择动作')
 		return
 	}
-	
-	// 获取选中的动作数据
+
 	const selectedActions = actionList.value.filter(a => selectedIds.value.includes(a.id))
-	
-	// 跳转到已选动作页面，传递数据
+
 	uni.navigateTo({
 		url: '/pages/freeTraining/selected-action',
 		success: (res) => {
@@ -161,13 +267,11 @@ const handleDone = () => {
 	})
 }
 
-// 查看详情
 const handleDetail = (action) => {
 	currentDetailAction.value = action
 	showDetailModal.value = true
 }
 
-// 从弹窗中选择添加
 const handleSelectFromModal = (action) => {
 	if (action && !isSelected(action.id)) {
 		selectedIds.value.push(action.id)
@@ -185,7 +289,6 @@ const handleSelectFromModal = (action) => {
 	box-sizing: border-box;
 }
 
-/* ========== 顶部导航栏 ========== */
 .nav-bar {
 	display: flex;
 	align-items: center;
@@ -223,7 +326,6 @@ const handleSelectFromModal = (action) => {
 	color: #ffffff;
 }
 
-/* 数量徽章 */
 .badge {
 	position: absolute;
 	top: -8rpx;
@@ -243,7 +345,6 @@ const handleSelectFromModal = (action) => {
 	color: #ffffff;
 }
 
-/* ========== 主体区域 ========== */
 .main-content {
 	flex: 1;
 	display: flex;
@@ -253,11 +354,10 @@ const handleSelectFromModal = (action) => {
 	padding-bottom: 24rpx;
 }
 
-/* ========== 右侧动作网格 ========== */
 .action-grid-scroll {
 	flex: 1;
 	height: 100%;
-	width: 0; /* 关键：flex 子项必须有明确宽度基准，否则内容会撑开 */
+	width: 0;
 }
 
 .action-grid {
@@ -267,15 +367,13 @@ const handleSelectFromModal = (action) => {
 	gap: 20rpx;
 	width: 100%;
 	box-sizing: border-box;
-	padding: 8rpx; /* 给 box-shadow 留空间 */
+	padding: 8rpx;
 }
 
-/* 卡片容器 - 控制宽度 */
 .action-card-wrapper {
 	width: calc(50% - 10rpx);
 }
 
-/* 按钮禁用状态 */
 .done-btn--disabled {
 	background-color: #cccccc;
 }

@@ -56,13 +56,5 @@ page {
   overflow: hidden !important;  /* ⭐ 防止被后面的默认样式覆盖 */
 }
 
-/* 仅 H5 平台：锁死浏览器原生滚动，只允许内部 scroll-view 滚动 */
- /* #ifdef H5 */
-html,
-body,
-#app {
-  height: 100% !important;
-  overflow: hidden !important;
-}
- /* #endif */
+/* html/body 样式仅 H5 需要，Android App 无需此块 */
 </style>

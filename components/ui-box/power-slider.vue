@@ -13,15 +13,19 @@
 		<!-- 轨道背景 -->
 		<view class="slider-track"></view>
 		<!-- 已选区填充 -->
-		<view 
-			class="slider-fill"
-			:style="fillStyle"
-		></view>
+		<!-- #ifdef APP-PLUS -->
+		<view class="slider-fill"></view>
+		<!-- #endif -->
+		<!-- #ifndef APP-PLUS -->
+		<view class="slider-fill" :style="fillStyle"></view>
+		<!-- #endif -->
 		<!-- 滑块按钮 -->
-		<view 
-			class="slider-thumb"
-			:style="thumbStyle"
-		></view>
+		<!-- #ifdef APP-PLUS -->
+		<view class="slider-thumb"></view>
+		<!-- #endif -->
+		<!-- #ifndef APP-PLUS -->
+		<view class="slider-thumb" :style="thumbStyle"></view>
+		<!-- #endif -->
 		<!-- 触摸热区（由 renderjs 绑定原生事件） -->
 		<view 
 			class="slider-touch-area"
@@ -227,6 +231,11 @@ export default {
 				this.bindDone = true
 				this.bindEvents(instance.$el)
 			}
+			
+			// ✅ 非拖拽状态下，由 renderjs 统一控制位置（避免与逻辑层 :style 冲突）
+			if (!this.isDragging && this.fillEl && this.thumbEl) {
+				this.syncPositionFromValue()
+			}
 		},
 		
 		// 解绑触摸事件
@@ -313,6 +322,24 @@ export default {
 			
 			if (this.ownerInstance) {
 				this.ownerInstance.callMethod('onDragEnd', this.currentValue)
+			}
+		},
+		
+		// 根据当前值同步位置（用于非拖拽时的外部更新）
+		syncPositionFromValue() {
+			const range = this.max - this.min
+			if (range <= 0) return
+			
+			const scale = Math.max(0, Math.min(1, (this.currentValue - this.min) / range))
+			
+			// 需要获取最新的 sliderRect
+			if (this.sliderEl) {
+				const rect = this.sliderEl.getBoundingClientRect()
+				if (rect.width > 0) {
+					this.fillEl.style.transform = `scaleX(${scale})`
+					const thumbOffset = scale * rect.width
+					this.thumbEl.style.transform = `translateX(${thumbOffset - this.halfThumbPx}px)`
+				}
 			}
 		},
 		

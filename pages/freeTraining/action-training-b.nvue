@@ -1,0 +1,926 @@
+﻿<!--
+ * 动作训练页 - 方案 B（nvue）
+ * 优势：video 与控件同层，避免 WebView/Native 分层导致的遮挡问题。
+ *
+ * 交互说明：
+ *   小窗模式：视频悬浮在右侧中部，控件正常布局
+ *   双击视频：进入全屏模式，视频铺满全屏，控件半透明叠在上方
+ *   双击全屏中间区域：退出全屏
+ *
+ * z-index 分层：
+ *   小窗：sw-layout(3) < video(8) < video-touch(9)
+ *   全屏：video(1) < video-touch(4) < fs-layout(7) < modal(20)
+-->
+<template>
+	<view class="container" :style="containerStyle">
+
+		<!-- ===== 视频（单实例，通过样式在小窗/全屏之间切换） ===== -->
+		<video
+			id="actionVideo"
+			:style="videoStyleObj"
+			:src="VIDEO_SRC"
+			:loop="true"
+			muted
+			:controls="false"
+			:show-center-play-btn="false"
+			:show-play-btn="false"
+			:enable-progress-gesture="false"
+			object-fit="fill"
+			@timeupdate="onVideoTimeUpdate"
+			@ended="onVideoEnded"
+			@loadedmetadata="onVideoLoadedMetadata"
+		></video>
+
+		<!-- 视频触摸层：覆盖视频区域，用于处理双击 -->
+		<view :style="videoTouchStyleObj" @tap="handleVideoTap"></view>
+
+		<!-- 固定顶部导航：小窗/全屏共用同一套标题与返回按钮 -->
+		<view class="global-nav">
+			<view class="global-back-btn" @click="goBack">
+				<view class="global-back-arrow"></view>
+			</view>
+			<text class="nav-title">{{ currentActionName }}</text>
+			<view style="width: 56rpx;"></view>
+		</view>
+
+		<!-- ===== 小窗模式控件 ===== -->
+		<view v-if="!isVideoFullscreen" :style="swLayoutStyle">
+			<!-- 数据看板 -->
+			<view class="stat-board sw-stat-board">
+				<view class="stat-item">
+					<text class="stat-label sw-stat-label">组数/次数</text>
+					<text class="stat-value sw-stat-value">{{ statBoard.sets }}</text>
+				</view>
+				<view class="stat-divider sw-stat-divider"></view>
+				<view class="stat-item">
+					<text class="stat-label sw-stat-label">时间</text>
+					<text class="stat-value sw-stat-value">{{ statBoard.duration }}</text>
+				</view>
+				<view class="stat-divider sw-stat-divider"></view>
+				<view class="stat-item">
+					<text class="stat-label sw-stat-label">千卡</text>
+					<text class="stat-value sw-stat-value">{{ statBoard.calories }}</text>
+				</view>
+			</view>
+
+			<!-- 弹性留白区域：给右侧悬浮视频让位 -->
+			<view class="center-spacer"></view>
+
+			<!-- 力量控制 -->
+			<view class="force-panel sw-force-panel">
+				<view class="force-header">
+					<text class="force-mode-text sw-force-mode-text">{{ modeName }}</text>
+					<text class="force-kg-text">{{ dialValue }} kg</text>
+				</view>
+				<view class="slider-row">
+					<view class="step-btn sw-step-btn" @click="decreaseForce">
+						<text class="step-text sw-step-text">-</text>
+					</view>
+					<slider
+						class="force-slider"
+						:value="dialValue"
+						:min="5"
+						:max="55"
+						:step="1"
+						activeColor="#4CAF50"
+						backgroundColor="#CCCCCC"
+						block-color="#FFFFFF"
+						:block-size="22"
+						@change="onSliderChange"
+						@changing="onSliderChanging"
+					/>
+					<view class="step-btn sw-step-btn" @click="increaseForce">
+						<text class="step-text sw-step-text">+</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 开始/停止按钮 -->
+			<view class="power-btn" :style="powerBtnStyle" @click="togglePower">
+				<text class="power-btn-text">{{ powerOn ? '■ 停止' : '▶ 开始训练' }}</text>
+			</view>
+		</view>
+
+		<!-- ===== 全屏模式控件：位置与小窗布局保持一致 ===== -->
+		<view v-else :style="fsLayoutStyle">
+			<!-- 数据看板 -->
+			<view class="stat-board sw-stat-board">
+				<view class="stat-item">
+					<text class="stat-label sw-stat-label">组数/次数</text>
+					<text class="stat-value sw-stat-value">{{ statBoard.sets }}</text>
+				</view>
+				<view class="stat-divider sw-stat-divider"></view>
+				<view class="stat-item">
+					<text class="stat-label sw-stat-label">时间</text>
+					<text class="stat-value sw-stat-value">{{ statBoard.duration }}</text>
+				</view>
+				<view class="stat-divider sw-stat-divider"></view>
+				<view class="stat-item">
+					<text class="stat-label sw-stat-label">千卡</text>
+					<text class="stat-value sw-stat-value">{{ statBoard.calories }}</text>
+				</view>
+			</view>
+
+			<!-- 中间留白区域：维持原位置，并支持双击退出全屏 -->
+			<view class="center-spacer" @tap="handleSpacerTap">
+				<text class="fs-hint-text">双击退出全屏</text>
+			</view>
+
+			<!-- 力量控制 -->
+			<view class="force-panel sw-force-panel">
+				<view class="force-header">
+					<text class="force-mode-text sw-force-mode-text">{{ modeName }}</text>
+					<text class="force-kg-text">{{ dialValue }} kg</text>
+				</view>
+				<view class="slider-row">
+					<view class="step-btn sw-step-btn" @click="decreaseForce">
+						<text class="step-text sw-step-text">-</text>
+					</view>
+					<slider
+						class="force-slider"
+						:value="dialValue"
+						:min="5"
+						:max="55"
+						:step="1"
+						activeColor="#4CAF50"
+						backgroundColor="#CCCCCC"
+						block-color="#FFFFFF"
+						:block-size="22"
+						@change="onSliderChange"
+						@changing="onSliderChanging"
+					/>
+					<view class="step-btn sw-step-btn" @click="increaseForce">
+						<text class="step-text sw-step-text">+</text>
+					</view>
+				</view>
+			</view>
+
+			<!-- 开始/停止按钮 -->
+			<view class="power-btn" :style="powerBtnStyle" @click="togglePower">
+				<text class="power-btn-text">{{ powerOn ? '■ 停止' : '▶ 开始训练' }}</text>
+			</view>
+		</view>
+
+		<!-- ===== 安全须知弹窗 ===== -->
+		<view v-if="showSafetyModal" class="modal-mask" :style="modalStyle">
+			<view class="modal-card">
+				<text class="modal-title">训练安全须知</text>
+				<text class="modal-item">1. 进行力量训练前，请先完成基础热身</text>
+				<text class="modal-item">2. 使用力量臂前，请确认力臂挡位已经锁好</text>
+				<text class="modal-item">3. 请勿将整个人或其他重物悬挂在力臂上</text>
+				<text class="modal-item">4. 请勿用硬物敲击设备屏幕</text>
+				<text class="modal-item">5. 训练结束后，请及时将力量臂复位并锁好</text>
+				<view class="modal-confirm-btn" @click="handleModalConfirm">
+					<text class="modal-confirm-text">我知道了</text>
+				</view>
+			</view>
+		</view>
+
+		<ModalBase
+			v-model:visible="showSetConfirmModal"
+			:width="560"
+			:border-radius="28"
+			:close-on-click-overlay="false"
+		>
+			<view class="set-confirm-modal">
+				<text class="set-confirm-title">本组已完成</text>
+				<text class="set-confirm-text">已完成 {{ completedSetLabel }} 组，是否继续训练？</text>
+				<text class="set-confirm-text set-confirm-text--sub">继续训练将保持力量输出，休息将关闭力量。</text>
+				<view class="set-confirm-actions">
+					<view class="set-confirm-btn set-confirm-btn--cancel" @click="handleRestTraining">
+						<text class="set-confirm-btn-text set-confirm-btn-text--dark">休息</text>
+					</view>
+					<view class="set-confirm-btn set-confirm-btn--confirm" @click="handleContinueTraining">
+						<text class="set-confirm-btn-text">继续训练</text>
+					</view>
+				</view>
+			</view>
+		</ModalBase>
+
+	</view>
+</template>
+
+<script>
+import ModalBase from '@/components/modals/modal-base.vue'
+import nvueSerialMixin from '@/utils/nvueSerialMixin.js'
+
+// 静态常量，避免放入 data 后被 Vue 做响应式代理
+const VIDEO_SRC = '/static/icons/general/video-placeholder.mp4'
+const FALLBACK_MODE = { key: 'FLUID', label: '流体阻力' }
+const FALLBACK_RESISTANCE = 15
+
+export default {
+	components: {
+		ModalBase
+	},
+	mixins: [nvueSerialMixin],
+	data() {
+		return {
+			screenWidth: 0,
+			screenHeight: 0,
+			svW: 0,
+			svH: 0,
+			svLeft: 0,
+			svTop: 0,
+
+			VIDEO_SRC,
+			videoCtx: null,
+			videoCurrentTime: 0,
+			// nvue 原生 video 的样式切换使用整对象替换，避免字段级更新不生效
+			videoStyleObj: { position: 'absolute', top: '0px', left: '0px', width: '0px', height: '0px', zIndex: 8 },
+			videoTouchStyleObj: {
+				position: 'absolute',
+				top: '0px',
+				left: '0px',
+				width: '0px',
+				height: '0px',
+				zIndex: 9,
+				backgroundColor: 'rgba(0,0,0,0.001)'
+			},
+			// 若切换过程中底层 video 被重置，则在 loadedmetadata 后 seek 回原进度
+			_switchTargetTime: -1,
+			isVideoFullscreen: false,
+			lastTapTs: 0,
+
+			trainingActions: [],
+			currentActionIndex: 0,
+			showSafetyModal: true,
+			showSetConfirmModal: false,
+
+			dialValue: FALLBACK_RESISTANCE,
+			lastForce: FALLBACK_RESISTANCE,
+			powerOn: false,
+
+			statBoard: {
+				sets: '01/00',
+				duration: '00:00:00',
+				calories: '00'
+			},
+
+			setCount: 0,
+			countBaseline: 0,
+			needCaptureBaseline: false,
+			pendingCompletedSetCount: 0,
+			pendingBaselineSportCount: 0,
+			activeSeconds: 0,
+			lastActiveTs: 0,
+			activeTimer: null
+		}
+	},
+
+	computed: {
+		containerStyle() {
+			return { width: this.screenWidth + 'px', height: this.screenHeight + 'px' }
+		},
+
+		swLayoutStyle() {
+			return {
+				position: 'absolute', top: 0, left: 0,
+				width: this.screenWidth + 'px', height: this.screenHeight + 'px',
+				zIndex: 3, flexDirection: 'column',
+				paddingTop: '120rpx',
+				paddingLeft: '30px',
+				paddingRight: '30px',
+				paddingBottom: '40px'
+			}
+		},
+
+		fsLayoutStyle() {
+			return {
+				position: 'absolute', top: 0, left: 0,
+				width: this.screenWidth + 'px', height: this.screenHeight + 'px',
+				zIndex: 7, flexDirection: 'column',
+				paddingTop: '120rpx',
+				paddingLeft: '30px',
+				paddingRight: '30px',
+				paddingBottom: '40px'
+			}
+		},
+
+		modalStyle() {
+			return {
+				position: 'absolute', top: 0, left: 0,
+				width: this.screenWidth + 'px', height: this.screenHeight + 'px',
+				zIndex: 20
+			}
+		},
+
+		currentActionName() {
+			const action = this.trainingActions[this.currentActionIndex]
+			return action ? action.name : '动作训练'
+		},
+
+		currentAction() {
+			return this.trainingActions[this.currentActionIndex] || null
+		},
+
+		currentActionMode() {
+			const action = this.currentAction
+			return action && action.defaultMode ? action.defaultMode : FALLBACK_MODE
+		},
+
+		currentForceModeValue() {
+			const modeKey = this.currentActionMode.key
+			return this.$FORCE_MODE[modeKey] !== undefined ? this.$FORCE_MODE[modeKey] : this.$FORCE_MODE.FLUID
+		},
+
+		currentDefaultResistance() {
+			const raw = this.currentAction && this.currentAction.defaultResistance
+			const value = Number(raw)
+			if (!Number.isFinite(value)) return FALLBACK_RESISTANCE
+			return Math.max(5, Math.min(55, value))
+		},
+
+		currentTargetSets() {
+			const raw = this.currentAction && this.currentAction.sets
+			const value = Number(raw)
+			if (!Number.isFinite(value) || value <= 0) return 1
+			return value
+		},
+
+		currentTargetReps() {
+			const raw = this.currentAction && this.currentAction.reps
+			const value = Number(raw)
+			if (!Number.isFinite(value) || value <= 0) return 1
+			return value
+		},
+
+		modeName() {
+			return this.currentActionMode.label
+		},
+
+		completedSetLabel() {
+			const completed = this.pendingCompletedSetCount || (this.setCount + 1)
+			return this.fmt2(completed) + '/' + this.fmt2(this.currentTargetSets)
+		},
+
+		currentTrainingSetLabel() {
+			return this.fmt2(this.setCount + 1)
+		},
+
+		powerBtnStyle() {
+			return {
+				backgroundColor: this.powerOn ? 'rgba(244,67,54,0.95)' : 'rgba(76,175,80,0.95)'
+			}
+		}
+	},
+
+	watch: {
+		trainingActions() {
+			this.syncCurrentActionConfig()
+		},
+		currentActionIndex() {
+			this.syncCurrentActionConfig()
+		}
+	},
+
+	onLoad() {
+		// 获取屏幕尺寸，放在 onLoad 中，避免 data() 阶段时机过早
+		const sys = uni.getSystemInfoSync()
+		const sw = sys.windowWidth
+		const sh = sys.windowHeight
+		this.screenWidth = sw
+		this.screenHeight = sh
+		// 小窗视频：竖屏 9:16，高度取屏幕高度的 40%
+		this.svH = Math.round(sh * 0.40)
+		this.svW = Math.round(this.svH * 9 / 16)
+		// 小窗位置：右侧，垂直居中偏上（约 28% 处）
+		this.svLeft = sw - this.svW - 15
+		this.svTop = Math.round(sh * 0.28)
+		// 初始化为小窗样式
+		this._applyVideoStyle(false)
+
+		// 接收上一页传来的训练动作列表
+		const pages = getCurrentPages()
+		const page = pages[pages.length - 1]
+		const channel = page && page.getOpenerEventChannel ? page.getOpenerEventChannel() : null
+		if (!channel) return
+		channel.on('trainingActions', (data) => {
+			this.trainingActions = data
+			this.syncCurrentActionConfig()
+		})
+	},
+
+	mounted() {
+		// 串口连接由 nvueSerialMixin 自动处理
+		this.$serial.on('frame', this.handleFrame)
+		// 延迟创建 videoCtx，等待 nvue 原生层渲染完成
+		setTimeout(() => {
+			this.ensureVideoCtx()
+		}, 500)
+	},
+
+	beforeDestroy() {
+		// 停止视频播放并释放资源
+		if (this.videoCtx) {
+			try { this.videoCtx.pause() } catch (e) { /* ignore */ }
+			this.videoCtx = null
+		}
+		if (this.activeTimer) { clearInterval(this.activeTimer); this.activeTimer = null }
+		this.$serial.off('frame', this.handleFrame)
+		if (this.powerOn) {
+			this.$serial.stopForce()  // 安全停力，持续发送 OFF 确保下位机收到
+		}
+		// 串口断开由 nvueSerialMixin 自动处理
+	},
+
+	methods: {
+		goBack() { uni.navigateBack() },
+
+		syncCurrentActionConfig() {
+			if (this.powerOn) return
+			this.dialValue = this.currentDefaultResistance
+			this.lastForce = this.currentDefaultResistance
+		},
+
+		updateStatBoard(currentCount, caloriesRaw) {
+			const caloriesText = caloriesRaw === undefined || caloriesRaw === null
+				? this.statBoard.calories
+				: (caloriesRaw / 1000).toFixed(0)
+			this.statBoard = {
+				sets: this.currentTrainingSetLabel + '/' + this.fmt2(currentCount),
+				duration: this.formatTime(this.activeSeconds),
+				calories: caloriesText
+			}
+		},
+
+		handleSetCompleted(currentSportCount, caloriesRaw) {
+			if (this.showSetConfirmModal) return
+			this.pendingCompletedSetCount = this.setCount + 1
+			this.pendingBaselineSportCount = currentSportCount
+			this.updateStatBoard(this.currentTargetReps, caloriesRaw)
+			this.showSetConfirmModal = true
+		},
+
+		applySetCompletion() {
+			this.setCount = this.pendingCompletedSetCount || (this.setCount + 1)
+			this.countBaseline = this.pendingBaselineSportCount
+			this.needCaptureBaseline = false
+			this.pendingCompletedSetCount = 0
+			this.pendingBaselineSportCount = 0
+			this.updateStatBoard(0, null)
+		},
+
+		handleContinueTraining() {
+			this.applySetCompletion()
+			this.showSetConfirmModal = false
+		},
+
+		handleRestTraining() {
+			this.applySetCompletion()
+			this.showSetConfirmModal = false
+			this.doPowerOff()
+		},
+
+		// 安全获取/创建 videoCtx，nvue 下需要传 this 作为第二参数
+		ensureVideoCtx() {
+			if (!this.videoCtx) {
+				try {
+					this.videoCtx = uni.createVideoContext('actionVideo', this)
+				} catch (e) {
+					console.warn('[action-training-b] createVideoContext 失败:', e)
+					return null
+				}
+			}
+			return this.videoCtx
+		},
+
+		handleModalConfirm() {
+			this.showSafetyModal = false
+			// 弹窗关闭后开始播放视频
+			setTimeout(() => {
+				const ctx = this.ensureVideoCtx()
+				if (ctx) ctx.play()
+			}, 300)
+		},
+
+		// 350ms 内两次 tap 视为双击
+		checkDoubleTap() {
+			const now = Date.now()
+			if (now - this.lastTapTs < 350) {
+				this.lastTapTs = 0
+				return true
+			}
+			this.lastTapTs = now
+			return false
+		},
+
+		// 小窗下双击视频区域进入全屏
+		handleVideoTap() {
+			if (this.checkDoubleTap()) {
+				// 先记录当前进度，再替换 style 对象并切换布局状态
+				this._switchTargetTime = this.videoCurrentTime
+				this._applyVideoStyle(true)
+				this.isVideoFullscreen = true
+			}
+		},
+
+		// 全屏中间区域双击退出全屏
+		handleSpacerTap() {
+			if (this.checkDoubleTap()) {
+				this._switchTargetTime = this.videoCurrentTime
+				this._applyVideoStyle(false)
+				this.isVideoFullscreen = false
+			}
+		},
+
+		onSliderChanging(e) {
+			const val = e.detail.value
+			this.dialValue = val
+			if (this.powerOn) this.$serial.updateWorkingForce(val)
+		},
+
+		onSliderChange(e) {
+			const val = e.detail.value
+			this.dialValue = val
+			this.lastForce = val
+			if (this.powerOn) this.$serial.updateWorkingForce(val)
+		},
+
+		decreaseForce() {
+			const val = Math.max(5, this.dialValue - 1)
+			this.dialValue = val; this.lastForce = val
+			if (this.powerOn) this.$serial.updateWorkingForce(val)
+		},
+
+		increaseForce() {
+			const val = Math.min(55, this.dialValue + 1)
+			this.dialValue = val; this.lastForce = val
+			if (this.powerOn) this.$serial.updateWorkingForce(val)
+		},
+
+		togglePower() { this.powerOn ? this.doPowerOff() : this.doPowerOn() },
+
+		doPowerOn() {
+			// startWorking 内部会自动取消进行中的关机序列
+			this.powerOn = true
+			this.needCaptureBaseline = true
+			this.pendingCompletedSetCount = 0
+			this.pendingBaselineSportCount = 0
+			this.lastActiveTs = 0
+			this.activeTimer = setInterval(() => {
+				if (this.lastActiveTs > 0 && Date.now() - this.lastActiveTs < 2000) this.activeSeconds++
+			}, 1000)
+			this.$serial.startWorking(this.dialValue, this.currentForceModeValue, 200)
+		},
+
+		doPowerOff() {
+			this.powerOn = false
+			if (this.activeTimer) { clearInterval(this.activeTimer); this.activeTimer = null }
+			this.$serial.stopForce()  // 安全停力，持续发送 OFF 确保下位机收到
+			this.dialValue = this.lastForce
+		},
+
+		// 记录视频当前播放进度
+		onVideoTimeUpdate(e) {
+			this.videoCurrentTime = e.detail.currentTime
+		},
+
+		// ended 作为 loop 的兜底，确保异常情况下也能继续播放
+		onVideoEnded() {
+			const ctx = this.ensureVideoCtx()
+			if (ctx) {
+				this.videoCurrentTime = 0
+				ctx.seek(0)
+				ctx.play()
+				console.log('[action-training-b] 视频播完，循环播放')
+			}
+		},
+
+		// 已验证：nvue video 的全屏/小窗切换要用整对象替换，不能只改对象字段
+		_applyVideoStyle(fullscreen) {
+			if (fullscreen) {
+				this.videoStyleObj = {
+					position: 'absolute',
+					top: '0px',
+					left: '0px',
+					width: this.screenWidth + 'px',
+					height: this.screenHeight + 'px',
+					zIndex: 1
+				}
+				this.videoTouchStyleObj = {
+					position: 'absolute',
+					top: '0px',
+					left: '0px',
+					width: this.screenWidth + 'px',
+					height: this.screenHeight + 'px',
+					zIndex: 4,
+					backgroundColor: 'rgba(0,0,0,0.001)'
+				}
+			} else {
+				this.videoStyleObj = {
+					position: 'absolute',
+					top: this.svTop + 'px',
+					left: this.svLeft + 'px',
+					width: this.svW + 'px',
+					height: this.svH + 'px',
+					zIndex: 8
+				}
+				this.videoTouchStyleObj = {
+					position: 'absolute',
+					top: this.svTop + 'px',
+					left: this.svLeft + 'px',
+					width: this.svW + 'px',
+					height: this.svH + 'px',
+					zIndex: 9,
+					backgroundColor: 'rgba(0,0,0,0.001)'
+				}
+			}
+		},
+
+		// 若切换样式时底层 video 被重置，则在 metadata 恢复后跳回原播放进度
+		onVideoLoadedMetadata() {
+			if (this._switchTargetTime >= 0) {
+				const t = this._switchTargetTime
+				this._switchTargetTime = -1
+				const ctx = this.ensureVideoCtx()
+				if (ctx) {
+					ctx.seek(t)
+					ctx.play()
+					console.log('[action-training-b] loadedmetadata 兜底 seek to', t)
+				}
+			}
+		},
+
+		handleFrame(data) {
+			const p = data.parsed
+			if (!p) return
+			if (this.needCaptureBaseline) { 
+                this.countBaseline = p.sportCount;
+                 this.needCaptureBaseline = false }
+			
+            if (Math.abs(p.left.speed) > 10 || Math.abs(p.right.speed) > 10) this.lastActiveTs = Date.now()
+			const currentCount = p.sportCount - this.countBaseline
+			if (this.showSetConfirmModal) {
+				this.updateStatBoard(this.currentTargetReps, p.calories)
+				return
+			}
+			this.updateStatBoard(currentCount, p.calories)
+			if (this.powerOn && !this.showSetConfirmModal && currentCount >= this.currentTargetReps) {
+				this.handleSetCompleted(p.sportCount, p.calories)
+			}
+		},
+
+		fmt2(n) { return String(n).padStart(2, '0') },
+		formatTime(s) {
+			return String(Math.floor(s / 3600)).padStart(2, '0') + ':' +
+				String(Math.floor((s % 3600) / 60)).padStart(2, '0') + ':' +
+				String(s % 60).padStart(2, '0')
+		}
+	}
+}
+</script>
+
+<style>
+/* nvue 不支持 scoped */
+/* nvue 不支持 overflow: hidden，已移除 */
+.container {
+	position: relative;
+	background-color: #f7f7f4;
+}
+
+/* ==================== 导航栏 ==================== */
+.global-nav {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 750rpx;
+	z-index: 10;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	height: 120rpx;
+	padding-top: 20rpx;
+	padding-left: 30rpx;
+	padding-right: 30rpx;
+}
+
+.global-back-btn {
+	width: 60rpx;
+	height: 60rpx;
+	border-radius: 50%;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(58, 58, 60, 0.82);
+}
+
+.global-back-arrow {
+	width: 22rpx;
+	height: 22rpx;
+	border-left-width: 5rpx;
+	border-left-style: solid;
+	border-left-color: #FFFFFF;
+	border-bottom-width: 5rpx;
+	border-bottom-style: solid;
+	border-bottom-color: #FFFFFF;
+	transform: rotate(45deg);
+	margin-left: 6rpx;
+}
+
+.nav-bar {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	height: 90rpx;
+	padding-top: 20rpx;
+	margin-bottom: 16rpx;
+}
+
+.back-btn { width: 56rpx; height: 56rpx; }
+
+.nav-title {
+	font-size: 36rpx;
+	font-weight: bold;
+	color: #222222;
+}
+
+/* ==================== 数据看板 ==================== */
+.stat-board {
+	flex-direction: row;
+	justify-content: space-around;
+	align-items: center;
+	height: 110rpx;
+	border-radius: 20rpx;
+	background-color: rgba(255, 255, 255, 0.1);
+	margin-bottom: 16rpx;
+	padding-left: 16rpx;
+	padding-right: 16rpx;
+}
+
+.fs-stat-board {
+	margin-left: 30rpx;
+	margin-right: 30rpx;
+	background-color: rgba(0, 0, 0, 0.5);
+}
+
+.sw-stat-board {
+	background-color: rgba(255, 255, 255, 0.96);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(0, 0, 0, 0.06);
+}
+
+.stat-item { flex-direction: column; align-items: center; }
+.stat-label { font-size: 22rpx; color: rgba(255,255,255,0.6); margin-bottom: 4rpx; }
+.stat-value { font-size: 30rpx; font-weight: bold; color: #FFFFFF; }
+.stat-divider { width: 2rpx; height: 50rpx; background-color: rgba(255,255,255,0.2); }
+
+.sw-stat-label { color: rgba(34, 34, 34, 0.6); }
+.sw-stat-value { color: #222222; }
+.sw-stat-divider { background-color: rgba(0, 0, 0, 0.08); }
+
+/* ==================== 力量控制 ==================== */
+.force-panel {
+	flex-direction: column;
+	margin-bottom: 20rpx;
+	padding-top: 20rpx;
+	padding-bottom: 20rpx;
+	padding-left: 24rpx;
+	padding-right: 24rpx;
+	border-radius: 20rpx;
+	background-color: rgba(255, 255, 255, 0.1);
+}
+
+.fs-force-panel {
+	margin-left: 30rpx;
+	margin-right: 30rpx;
+	background-color: rgba(0, 0, 0, 0.5);
+}
+
+.sw-force-panel {
+	background-color: rgba(255, 255, 255, 0.96);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(0, 0, 0, 0.06);
+}
+
+.force-header { flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 16rpx; }
+.force-mode-text { font-size: 26rpx; color: rgba(255,255,255,0.7); }
+.force-kg-text { font-size: 48rpx; font-weight: bold; color: #4CAF50; }
+
+.sw-force-mode-text { color: rgba(34, 34, 34, 0.65); }
+
+.slider-row { flex-direction: row; align-items: center; }
+.step-btn {
+	width: 80rpx; height: 80rpx; border-radius: 40rpx;
+	background-color: rgba(255,255,255,0.15);
+	align-items: center; justify-content: center;
+}
+.step-text { font-size: 52rpx; color: #FFFFFF; }
+.force-slider { flex: 1; margin-left: 16rpx; margin-right: 16rpx; }
+
+.sw-step-btn { background-color: rgba(0, 0, 0, 0.08); }
+.sw-step-text { color: #222222; }
+
+/* ==================== 开始/停止按钮 ==================== */
+.power-btn {
+	height: 100rpx;
+	margin-bottom: 50rpx;
+	border-radius: 50rpx;
+	align-items: center;
+	justify-content: center;
+}
+.power-btn-text { font-size: 36rpx; font-weight: bold; color: #FFFFFF; }
+
+/* ==================== 全屏控件层 ==================== */
+.center-spacer {
+	flex: 1;
+	align-items: center;
+	justify-content: flex-end;
+	padding-bottom: 20rpx;
+}
+
+.fs-spacer { flex: 1; align-items: center; justify-content: flex-end; padding-bottom: 20rpx; }
+.fs-hint-text { font-size: 22rpx; color: rgba(255,255,255,0.3); }
+
+.fs-bottom {
+	flex-direction: column;
+	background-color: rgba(0,0,0,0.15);
+	padding-top: 16rpx;
+}
+
+/* ==================== 安全须知弹窗 ==================== */
+.modal-mask { background-color: rgba(0,0,0,0.65); align-items: center; justify-content: center; }
+
+.modal-card {
+	width: 600rpx;
+	background-color: #FFFFFF;
+	border-radius: 24rpx;
+	padding-top: 40rpx; padding-bottom: 40rpx;
+	padding-left: 40rpx; padding-right: 40rpx;
+	flex-direction: column;
+}
+
+.modal-title { font-size: 36rpx; font-weight: bold; color: #333333; text-align: center; margin-bottom: 24rpx; }
+.modal-item { font-size: 26rpx; color: #555555; line-height: 48rpx; margin-bottom: 6rpx; }
+
+.modal-confirm-btn {
+	height: 88rpx;
+	background-color: #4CAF50;
+	border-radius: 44rpx;
+	align-items: center; justify-content: center;
+	margin-top: 30rpx;
+}
+.modal-confirm-text { font-size: 32rpx; font-weight: bold; color: #FFFFFF; }
+
+.set-confirm-modal {
+	flex-direction: column;
+	padding-top: 36rpx;
+	padding-bottom: 36rpx;
+	padding-left: 32rpx;
+	padding-right: 32rpx;
+}
+
+.set-confirm-title {
+	font-size: 34rpx;
+	font-weight: bold;
+	color: #222222;
+	text-align: center;
+	margin-bottom: 20rpx;
+}
+
+.set-confirm-text {
+	font-size: 28rpx;
+	color: #444444;
+	text-align: center;
+	line-height: 42rpx;
+}
+
+.set-confirm-text--sub {
+	font-size: 24rpx;
+	color: #777777;
+	margin-top: 12rpx;
+}
+
+.set-confirm-actions {
+	flex-direction: row;
+	justify-content: space-between;
+	margin-top: 28rpx;
+}
+
+.set-confirm-btn {
+	width: 230rpx;
+	height: 84rpx;
+	border-radius: 42rpx;
+	align-items: center;
+	justify-content: center;
+}
+
+.set-confirm-btn--cancel {
+	background-color: #F1F2F4;
+}
+
+.set-confirm-btn--confirm {
+	background-color: #4CAF50;
+}
+
+.set-confirm-btn-text {
+	font-size: 28rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.set-confirm-btn-text--dark {
+	color: #333333;
+}
+</style>

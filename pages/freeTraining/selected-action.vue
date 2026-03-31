@@ -68,8 +68,8 @@ import ModalBase from '@/components/modals/modal-base.vue'
 import SelectedActionCard from './components/selected-action-card.vue'
 
 // ========== 常量 ==========
-const DEFAULT_SETS = 1
-const DEFAULT_REPS = 12
+const FALLBACK_SETS = 1
+const FALLBACK_REPS = 12
 
 // ========== 状态 ==========
 const actionList = ref([])
@@ -89,8 +89,8 @@ onLoad(() => {
 				// 为每个动作添加组数和次数的默认值
 				actionList.value = data.map(action => ({
 					...action,
-					sets: DEFAULT_SETS,
-					reps: DEFAULT_REPS
+					sets: action.recommendedSets ?? FALLBACK_SETS,
+					reps: action.recommendedReps ?? FALLBACK_REPS
 				}))
 				console.log('接收到的动作数据：', actionList.value)
 			})
@@ -175,7 +175,7 @@ const startTraining = () => {
 	}
 	
 	uni.navigateTo({
-		url: '/pages/freeTraining/action-training',
+		url: '/pages/freeTraining/action-training-b',	// nvue 方案B
 		success: (res) => {
 			res.eventChannel.emit('trainingActions', actionList.value)
 		}

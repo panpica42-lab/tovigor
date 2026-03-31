@@ -43,7 +43,7 @@
 				<view class="stat-item">
 					<image class="stat-icon" src="/static/icons/freeTrainingActivity/ic_calories.png" mode="aspectFit"></image>
 					<view class="stat-content">
-						<text class="stat-label">单量/千卡</text>
+						<text class="stat-label">千卡(kcal)</text>
 						<text class="stat-value">{{ statBoard.calories }}</text>
 					</view>
 				</view>
@@ -55,53 +55,22 @@
 			<image class="force-curve-img" src="/static/icons/freeTrainingActivity/force-curve-fake.jpg" mode="aspectFit"></image>
 		</view>
 		
-		<!-- 力量控制区：旋钮 + 开关 -->
+		<!-- 力量控制区：旋钮组件 -->
 		<view class="control-center">
-			<!-- 力量旋钮区域 -->
-			<view class="dial-wrapper"
-				@touchstart="onDialTouch"
-				@touchmove.stop.prevent="onDialTouch">
-				
-				<!-- 圆弧背景（灰色底） -->
-				<image class="dial-arc dial-arc-bg" 
-					src="/static/icons/freeTrainingActivity/ic_resistance_adjust.svg" 
-					mode="aspectFit" 
-					:class="{ 'dial-arc--off': !powerOn }" />
-				
-				<!-- 圆弧进度（彩色，通过遮罩显示进度） -->
-				<view v-if="powerOn" class="dial-arc-progress-wrapper" 
-					:style="{ '--progress-angle': (dial.currentAngle + 120) + 'deg' }">
-					<image class="dial-arc dial-arc-active" 
-						src="/static/icons/freeTrainingActivity/ic_resistance_adjust.svg" 
-						mode="aspectFit" />
-				</view>
-				
-				<!-- 装饰图片（仅开机时显示） -->
-				<image v-if="powerOn" class="dial-decoration" 
-					src="/static/icons/freeTrainingActivity/ic_decoration.png" 
-					mode="aspectFit" />
-				
-				<!-- 圆形中心区域 -->
-				<view class="dial-circle" :class="{ 'dial-circle--on': powerOn }">
-					<!-- 力量值显示 -->
-					<text class="dial-value">{{ dial.currentValue }}</text>
-					<text class="dial-unit">kg</text>
-				</view>
-				
-				<!-- 开关按钮（位于圆球正中央） -->
-				<view class="dial-power-btn" 
-					@tap.stop="togglePower"
-					@touchstart.stop
-					@touchmove.stop>
-					<image class="power-icon" 
-						src="/static/icons/freeTrainingActivity/ic_power.svg" 
-						mode="aspectFit" />
-				</view>
-			</view>
+			<PowerDial
+				ref="powerDialRef"
+				v-model="dialValue"
+				:min="5"
+				:max="55"
+				:initial-power-on="false"
+				:mode-name="currentModeName"
+				@change="onDialChange"
+				@power-change="onPowerChange"
+			/>
 		</view>
 		
-		<!-- 底部模式选择 -->
-		<view :class="bottomPanelClass">
+		<!-- 底部模式选择（开机时隐藏但占位） -->
+		<view class="bottom-panel" :class="{ 'bottom-panel--hidden': powerOn }">
 			<view class="mode-label mode-label--active">
 				<text class="mode-label-text">模式</text>
 				<text class="mode-label-text">选择</text>
@@ -138,8 +107,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { onReady, onBackPress, onLoad } from '@dcloudio/uni-app'
+import PowerDial from '@/components/ui-box/power-dial.vue'
+import serialService, { FORCE_MODE } from '@/utils/serialService.js'
 
 // ==================== 状态管理 ====================
 const showSafetyModal = ref(false)
@@ -151,19 +122,12 @@ const statBoard = ref({
 	calories: '00.00'
 })
 
-// 是否开启
+// 力量旋钮组件引用和状态
+const powerDialRef = ref(null)
+const DEFAULT_FORCE = 15
+const dialValue = ref(DEFAULT_FORCE)
+let lastForce = DEFAULT_FORCE  // 力量记忆（页面销毁后失效）
 const powerOn = ref(false)
-
-// 力量旋钮
-const dial = ref({
-	startAngle: -120,   // 圆弧起点角度（左侧）
-	endAngle: 120,      // 圆弧终点角度（右侧）
-	minValue: 0,        // 最小力量值 = 0kg
-	maxValue: 100,      // 最大力量值 = 100kg
-	currentAngle: -120, // 当前滑块所处角度（实时更新）
-	currentValue: 0,    // 当前力量值（实时更新）
-	center: null        // {x,y} 记录圆心，用于触摸计算
-})
 
 // 模式列表（恒力排在最前面）
 const modes = ref([
@@ -207,24 +171,49 @@ const modes = ref([
 
 const selectedMode = ref(0) // 默认选中恒力（索引 0）
 
-// 定时器
-let trainingTimer = null
+// UI 模式 key 到 FORCE_MODE 的映射
+const MODE_KEY_MAP = {
+	'hengli': FORCE_MODE.CONST,      // 恒力
+	'xiangxin': FORCE_MODE.CONC_ISO, // 向心等张
+	'lixin': FORCE_MODE.ECC_ISO,     // 离心等张
+	'liuti': FORCE_MODE.FLUID,       // 流体阻力
+	'dengsu': FORCE_MODE.BALANCE,    // 等速（暂用平衡模式）
+	'tanli': FORCE_MODE.ELASTIC      // 弹力
+}
+
+// 组数计数器（每次开机 +1，页面销毁归零）
+let setCount = 0
+let countBaseline = 0        // 每组开始时的 sportCount 基准值
+let needCaptureBaseline = false  // 开机后等待第一帧来捕获基准
+
+// ---- 运动计时（JS 端，仅绳子在动时累加）----
+const SPEED_THRESHOLD = 10   // mm/s，任一手速度绝对值 > 此值视为在运动
+const IDLE_WINDOW = 2000     // ms，超过此时长无活跃帧则暂停计时
+let activeSeconds = 0        // 累计运动秒数（跨组累加，页面销毁归零）
+let lastActiveTs = 0         // 最近一次检测到运动的时间戳
+let activeTimer = null       // 1 秒 setInterval
+
+// ==================== 辅助函数 ====================
+
+// 秒数 → HH:MM:SS
+function formatTime(totalSeconds) {
+	const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0')
+	const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0')
+	const s = String(totalSeconds % 60).padStart(2, '0')
+	return `${h}:${m}:${s}`
+}
+
+// 组数/次数 → "01/03" 格式
+function formatSets(sets, count) {
+	return `${String(sets).padStart(2, '0')}/${String(count).padStart(2, '0')}`
+}
 
 // ==================== 计算属性 ====================
-const handleStyle = computed(() => {
-	return `transform: translate(-50%, -50%) rotate(${dial.value.currentAngle}deg);`
-})
 
-// 计算进度百分比（0~1）
-const progressRatio = computed(() => {
-	const startAngle = dial.value.startAngle // -120°
-	const endAngle = dial.value.endAngle     // +120°
-	const currentAngle = dial.value.currentAngle
-	return (currentAngle - startAngle) / (endAngle - startAngle)
-})
-
-const bottomPanelClass = computed(() => {
-	return 'bottom-panel'
+// 当前模式名（传给 PowerDial 显示）
+const currentModeName = computed(() => {
+	const m = modes.value[selectedMode.value]
+	return m ? m.shortName : '恒力'
 })
 
 const hasMode = computed(() => {
@@ -252,27 +241,44 @@ onLoad((options) => {
 	// 如果没有传参数，保持默认值 0（恒力）
 })
 
+// 串口帧回调 —— 更新看板数据
+const handleFrame = (data) => {
+	const p = data.parsed
+	if (!p) return
+	// 开机后第一帧：捕获基准值
+	if (needCaptureBaseline) {
+		countBaseline = p.sportCount
+		needCaptureBaseline = false
+	}
+	// 检测运动：任一手速度绝对值超过阈值 → 刷新活跃时间戳
+	if (Math.abs(p.left.speed) > SPEED_THRESHOLD || Math.abs(p.right.speed) > SPEED_THRESHOLD) {
+		lastActiveTs = Date.now()
+	}
+	const currentCount = p.sportCount - countBaseline
+	statBoard.value = {
+		sets: formatSets(setCount, currentCount),
+		duration: formatTime(activeSeconds),
+		calories: (p.calories / 1000).toFixed(2)
+	}
+}
+
 onMounted(() => {
 	showSafetyModal.value = true
+	// 订阅串口帧事件
+	serialService.on('frame', handleFrame)
 })
 
-// 页面渲染完成后计算圆心坐标（只算一次）
-onReady(() => {
-	uni.createSelectorQuery()
-		.select('.dial-circle')
-		.boundingClientRect(data => {
-			if (!data) return
-			dial.value.center = {
-				x: data.left + data.width / 2,
-				y: data.top + data.height / 2
-			}
-		})
-		.exec()
-})
 
-onUnmounted(() => {
-	if (trainingTimer) {
-		clearInterval(trainingTimer)
+
+onBeforeUnmount(() => {
+	console.log('自由训练页 - 页面卸载，清理资源')
+	// 停止运动计时
+	if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
+	// 取消串口帧订阅
+	serialService.off('frame', handleFrame)
+	// 确保停止力量输出（包含任何进行中的关机序列）
+	if (powerOn.value) {
+		serialService.stopForce()
 	}
 })
 
@@ -294,23 +300,43 @@ const handleModalConfirm = () => {
 	// console.log('用户已确认安全须知')
 }
 
-// 开关按钮
-const togglePower = () => {
-	powerOn.value = !powerOn.value
-	
-	// 关机时把力量设为0，滑块回到起点
-	if (!powerOn.value) {
-		dial.value.currentValue = 0
-		dial.value.currentAngle = dial.value.startAngle
+// 力量旋钮值变化回调（仅 touchend 时触发）
+const onDialChange = (value) => {
+	console.log('力量值确认:', value)
+	lastForce = value  // 记忆力量值
+	// 如果已开机，通知下位机更新力量
+	if (powerOn.value) {
+		serialService.updateWorkingForce(value)
 	}
+}
+
+// 开关状态变化回调
+const onPowerChange = (isOn) => {
+	powerOn.value = isOn
+	console.log('开关状态:', isOn ? '开' : '关')
 	
-	// TODO: 通知下位机开/关机
-	// if (powerOn.value) {
-	//   const mode = modes.value[selectedMode.value]
-	//   startWorking(dial.value.currentValue, FORCE_MODE[mode.key.toUpperCase()])
-	// } else {
-	//   stopWorking()
-	// }
+	if (isOn) {
+		// 如果在关机发送序列中重新开机，立即停止关机序列
+		// 开启：组数 +1，下一帧捕获次数基准（实现组内次数归零）
+		setCount++
+		needCaptureBaseline = true
+		// 启动运动计时器（1 秒窗口：窗口内有活跃帧 → +1s）
+		lastActiveTs = 0
+		activeTimer = setInterval(() => {
+			if (lastActiveTs > 0 && (Date.now() - lastActiveTs) < IDLE_WINDOW) {
+				activeSeconds++
+			}
+		}, 1000)
+		const mode = modes.value[selectedMode.value]
+		const forceMode = MODE_KEY_MAP[mode.key] || FORCE_MODE.CONST
+		serialService.startWorking(dialValue.value, forceMode, 200)  // 5Hz
+	} else {
+		// 关闭：停止运动计时 + 安全停力（持续发 OFF 确保下位机收到）
+		if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
+		serialService.stopForce()  // stopWorking + 持续发 2s OFF 帧
+		// 恢复到上次使用的力量值（PowerDial 关机会把值设为 min）
+		dialValue.value = lastForce
+	}
 }
 
 // 模式选择（选择即确认，不依赖开关状态）
@@ -319,65 +345,15 @@ const selectMode = (index) => {
 	
 	selectedMode.value = index
 	
-	// TODO: 如果已开机，通知下位机切换模式
-	// if (powerOn.value) {
-	//   const mode = modes.value[index]
-	//   sendModeToDevice(mode.key)
-	// }
+	// 如果已开机，更新下位机的力量模式（下个 tick 自动生效，无顿挫）
+	if (powerOn.value) {
+		const mode = modes.value[index]
+		const forceMode = MODE_KEY_MAP[mode.key] || FORCE_MODE.CONST
+		serialService.updateWorkingForce(dialValue.value, forceMode)
+	}
 }
 
-// 旋钮拖动（触摸开始/移动触发）
-// 节流变量
-let lastUpdateTime = 0
-const UPDATE_INTERVAL = 20 // 约60fps，降低更新频率避免卡顿
-const onDialTouch = (e) => {
-	if (!powerOn.value) return // 关机时不允许调节
-	if (!dial.value.center) return // 圆心未计算完成，跳过
-	
-	// 节流：限制更新频率
-	const now = Date.now()
-	if (now - lastUpdateTime < UPDATE_INTERVAL) return
-	lastUpdateTime = now
-	
-	// 1. 读取触点坐标
-	const touch = e.touches[0]
-	const touchX = touch.clientX || touch.x
-	const touchY = touch.clientY || touch.y
-	
-	// 2. 计算指向向量
-	const dx = touchX - dial.value.center.x
-	const dy = touchY - dial.value.center.y
-	
-	// 3. 转换为角度（atan2 返回 -180° ~ 180°）
-	let angleRaw = Math.atan2(dy, dx) * 180 / Math.PI
-	// 让正上方成为 0°（atan2 中右侧是0°，需要旋转90°）
-	let angle = angleRaw + 90
-	
-	// 处理角度跨越 ±180° 边界的情况
-	if (angle > 180) {
-		angle = angle - 360
-	} else if (angle < -180) {
-		angle = angle + 360
-	}
-	
-	// 4. 将角度限制在圆弧范围 [startAngle, endAngle]
-	const startAngle = dial.value.startAngle // -120°
-	const endAngle = dial.value.endAngle     // +120°
-	
-	// 限制在圆弧范围内
-	angle = Math.max(startAngle, Math.min(angle, endAngle))
-	
-	// 5. 根据角度映射到 0~100kg
-	const ratio = (angle - startAngle) / (endAngle - startAngle) // 0~1
-	const value = dial.value.minValue + ratio * (dial.value.maxValue - dial.value.minValue) // 0~100
-	
-	// 6. 更新状态（批量更新减少响应式开销）
-	dial.value.currentAngle = angle
-	dial.value.currentValue = Math.round(value)
-	
-	// 7. 通知下位机
-	// TODO: sendStrengthToDevice(dial.value.currentValue)
-}
+
 </script>
 
 <style scoped>
@@ -519,145 +495,6 @@ const onDialTouch = (e) => {
 	margin-bottom: 20rpx;
 }
 
-.dial-wrapper {
-	position: relative;
-	width: 400rpx;
-	height: 400rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	overflow: visible;
-}
-
-/* 圆弧背景（灰色底） */
-.dial-arc {
-	position: absolute;
-	width: 100%;
-	height: 100%;
-	pointer-events: none;
-}
-
-.dial-arc-bg {
-	opacity: 0.3;
-	transition: opacity 0.3s;
-}
-
-.dial-arc--off {
-	opacity: 0.2;
-	filter: grayscale(100%);
-}
-
-/* 圆弧进度容器（用于裁剪进度） */
-.dial-arc-progress-wrapper {
-	position: absolute;
-	width: 100%;
-	height: 100%;
-	pointer-events: none;
-	overflow: hidden;
-	/* 使用CSS变量接收角度值 */
-	--progress-angle: 0deg;
-}
-
-/* 圆弧进度（彩色高亮） */
-.dial-arc-active {
-	opacity: 1;
-	filter: drop-shadow(0 0 10rpx rgba(76, 175, 80, 0.6));
-	/* 通过遮罩实现进度效果 */
-	mask-image: conic-gradient(
-		from -120deg at 50% 50%,
-		#000 0deg,
-		#000 var(--progress-angle),
-		#0000 var(--progress-angle)
-	);
-	-webkit-mask-image: conic-gradient(
-		from -120deg at 50% 50%,
-		#000 0deg,
-		#000 var(--progress-angle),
-		#0000 var(--progress-angle)
-	);
-}
-
-/* 装饰图片（光环平面效果） */
-.dial-decoration {
-	position: absolute;
-	width: 550rpx;
-	height: 300rpx;
-	bottom: -60rpx;
-	left: 50%;
-	transform: translateX(-50%);
-	pointer-events: none;
-	z-index: 1;
-}
-
-/* 圆形中心区域 */
-.dial-circle {
-	position: relative;
-	width: 200rpx;
-	height: 200rpx;
-	border-radius: 50%;
-	background: linear-gradient(180deg, #f5f5f5 0%, #e0e0e0 100%);
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	box-shadow: 
-		0 12rpx 30rpx rgba(0, 0, 0, 0.15),
-		inset 0 2rpx 4rpx rgba(255, 255, 255, 0.8);
-	transition: all 0.3s;
-	z-index: 2;
-}
-
-.dial-circle--on {
-	background: linear-gradient(180deg, rgba(139, 195, 74, 0.6) 0%, rgba(76, 175, 80, 0.7) 100%);
-	box-shadow: 
-		0 12rpx 40rpx rgba(76, 175, 80, 0.5),
-		inset 0 2rpx 4rpx rgba(255, 255, 255, 0.5);
-}
-
-/* 力量值显示 */
-.dial-value {
-	font-size: 52rpx;
-	font-weight: bold;
-	color: #333333;
-	line-height: 1;
-}
-
-.dial-unit {
-	font-size: 22rpx;
-	color: #666666;
-	margin-top: 2rpx;
-}
-
-/* 开关按钮（位于圆球正中央） */
-.dial-power-btn {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%);
-	width: 90rpx;
-	height: 90rpx;
-	border-radius: 50%;
-	background: linear-gradient(180deg, #ffffff 0%, #f0f0f0 100%);
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	box-shadow: 
-		0 6rpx 16rpx rgba(0, 0, 0, 0.2),
-		inset 0 1rpx 2rpx rgba(255, 255, 255, 0.9);
-	transition: all 0.3s;
-	z-index: 3;
-}
-
-.dial-power-btn:active {
-	transform: translate(-50%, -50%) scale(0.95);
-}
-
-.power-icon {
-	width: 48rpx;
-	height: 48rpx;
-	opacity: 0.7;
-}
-
 /* ==================== 底部模式选择区 ==================== */
 .bottom-panel {
 	flex-shrink: 0;
@@ -667,11 +504,12 @@ const onDialTouch = (e) => {
 	border-radius: 50rpx;
 	padding: 16rpx 24rpx;
 	gap: 20rpx;
-	transition: opacity 0.3s;
+	transition: opacity 0.3s, visibility 0.3s;
 }
 
-.bottom-panel--off {
-	opacity: 0.4;
+.bottom-panel--hidden {
+	opacity: 0;
+	visibility: hidden;
 	pointer-events: none;
 }
 

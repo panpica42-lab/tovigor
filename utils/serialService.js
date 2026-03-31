@@ -829,6 +829,8 @@ export function scanDevices(prefixes = ['/dev/ttyS', '/dev/ttyUSB', '/dev/ttyAMA
 let sendTimer = null
 let workingForce = 0
 let workingMode = 0
+let shutdownTimer = null   // stopForce() 关机序列 interval
+let shutdownTimeout = null // stopForce() 关机序列 timeout
 
 /**
  * 启动工作状态（周期发送 + 轮询读取）
@@ -837,6 +839,8 @@ let workingMode = 0
  * @param {number} sendInterval - 发送间隔，默认 200ms (5Hz)
  */
 export function startWorking(force, forceMode, sendInterval = 200) {
+  // 取消进行中的关机序列（防止重新开机时被 OFF 帧干扰）
+  _cancelShutdownSequence()
   // 先停止之前的
   stopWorking()
   
@@ -887,6 +891,47 @@ export function stopWorking() {
 }
 
 /**
+ * 内部：取消关机发送序列
+ */
+function _cancelShutdownSequence() {
+  if (shutdownTimer) { clearInterval(shutdownTimer); shutdownTimer = null }
+  if (shutdownTimeout) { clearTimeout(shutdownTimeout); shutdownTimeout = null }
+}
+
+/**
+ * 停止力量输出（安全关机序列）
+ *
+ * 流程：
+ * 1. 停止周期发送（stopWorking）
+ * 2. 立即发一帧 force=5, mode=OFF
+ * 3. 按 interval 持续发 OFF 帧，共发 duration ms
+ * 4. 到期后自动结束
+ *
+ * ⚠️  必须用 force=5（非0），否则触发硬件紧急停车！
+ *
+ * @param {Object}  [options]
+ * @param {number}  [options.duration=2000]  持续发送时长(ms)
+ * @param {number}  [options.interval=200]   发送间隔(ms)
+ */
+export function stopForce({ duration = 2000, interval = 200 } = {}) {
+  // 防止重叠：先取消上一次未结束的序列
+  _cancelShutdownSequence()
+  // 停止周期发送
+  stopWorking()
+  // 立即发第一帧，不等 interval
+  sendOnce(5, FORCE_MODE.OFF)
+  // 持续发送
+  shutdownTimer = setInterval(() => {
+    sendOnce(5, FORCE_MODE.OFF)
+  }, interval)
+  shutdownTimeout = setTimeout(() => {
+    _cancelShutdownSequence()
+    console.log('[serialService] 停力序列结束')
+  }, duration)
+  console.log('[serialService] 停力序列启动, duration:', duration, 'ms, interval:', interval, 'ms')
+}
+
+/**
  * 启动读取（仅轮询，不发送）- 供测试页面使用
  * 注意：正常业务页面应使用 startWorking()
  */
@@ -904,12 +949,16 @@ export function stopReading() {
 }
 
 /**
- * 更新工作力量值（不重启定时器）
+ * 更新工作力量值/模式（不重启定时器，下个 tick 自动生效）
  * @param {number} force - 新的力量值
+ * @param {number} [forceMode] - 新的力量模式（可选，不传则保持当前模式）
  */
-export function updateWorkingForce(force) {
+export function updateWorkingForce(force, forceMode) {
   workingForce = force
-  console.log('[serialService] 更新工作力量:', force)
+  if (forceMode !== undefined) {
+    workingMode = forceMode
+  }
+  console.log('[serialService] 更新工作参数:', { force, mode: workingMode })
 }
 
 /**
@@ -956,7 +1005,8 @@ export function isWorking() {
 export function cleanup() {
   console.log('[serialService] 清理资源...')
   
-  stopWorking()  // 停止工作状态（包含 stopPolling）
+  _cancelShutdownSequence()  // 取消进行中的停力序列
+  stopWorking()              // 停止工作状态（包含 stopPolling）
   
   if (isConnected && portId > 0) {
     closeSerial({
@@ -992,6 +1042,7 @@ export default {
   // 工作状态控制
   startWorking,
   stopWorking,
+  stopForce,
   updateWorkingForce,
   sendOnce,
   isWorking,

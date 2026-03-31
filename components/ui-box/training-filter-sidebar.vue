@@ -229,7 +229,7 @@ const expanded = ref({
 	method: false,
 	duration: false,
 	equipment: false,
-	coach: false
+	coach: true
 })
 
 // 选项数据定义
