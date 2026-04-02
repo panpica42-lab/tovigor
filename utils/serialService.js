@@ -346,7 +346,8 @@ export function disconnect() {
     console.log('[serialService] 正在断开连接...')
     
     // 先停止轮询
-    stopPolling()
+    _cancelShutdownSequence()
+    stopWorking()
 
     closeSerial({
       portId,
@@ -382,6 +383,44 @@ export function disconnect() {
  * @param {number} options.timeout - 超时时间，默认 1000ms
  * @returns {Promise}
  */
+let commandEpoch = 0
+
+function nextCommandEpoch() {
+  commandEpoch += 1
+  return commandEpoch
+}
+
+function writeSerialDirect(data, options = {}) {
+  const format = options.format || 'hex'
+  const timeout = options.timeout || 1000
+  const epoch = options.epoch
+
+  return new Promise((resolve, reject) => {
+    if (epoch !== undefined && epoch !== null && epoch !== commandEpoch) {
+      resolve({ skipped: true, stale: true })
+      return
+    }
+
+    if (!isConnected || portId === 0) {
+      reject({ errCode: 10005, errMsg: 'serial not connected' })
+      return
+    }
+
+    writeSerial({
+      portId,
+      data,
+      format,
+      timeout,
+      success: (res) => {
+        resolve(res)
+      },
+      fail: (err) => {
+        reject(err)
+      }
+    })
+  })
+}
+
 export function send(data, options = {}) {
   return new Promise((resolve, reject) => {
     if (!isConnected || portId === 0) {
@@ -394,20 +433,15 @@ export function send(data, options = {}) {
     const format = options.format || 'hex'
     const timeout = options.timeout || 1000
 
-    writeSerial({
-      portId,
-      data,
-      format,
-      timeout,
-      success: (res) => {
+    writeSerialDirect(data, { format, timeout })
+      .then((res) => {
         resolve(res)
-      },
-      fail: (err) => {
-        console.error('[serialService] 发送失败:', err)
+      })
+      .catch((err) => {
+        console.error('[serialService] send failed:', err)
         emit('error', { type: 'send', ...err })
         reject(err)
-      }
-    })
+      })
   })
 }
 
@@ -537,7 +571,7 @@ function handleReceivedData(hexData) {
       crcOffset = D180_CRC_OFFSET
     } else {
       // 未知包类型，跳过这个帧头，继续查找
-      console.warn('[serialService] 未知包类型:', packType.toString(16))
+      console.warn('[serialService] unknown pack type:', packType.toString(16))
       rxBuffer = rxBuffer.substring(2)
       continue
     }
@@ -554,7 +588,7 @@ function handleReceivedData(hexData) {
     // 验证帧尾
     const tailByte = frameBytes[frameBytes.length - 1]
     if (tailByte !== FRAME_TAIL) {
-      console.warn('[serialService] 帧尾校验失败:', tailByte.toString(16), '期望: 65')
+      console.warn('[serialService] frame tail check failed:', tailByte.toString(16), 'expected: 65')
       rxBuffer = rxBuffer.substring(2)
       continue
     }
@@ -563,9 +597,9 @@ function handleReceivedData(hexData) {
     const crcResult = verifyCrc(frameBytes, crcOffset)
     
     if (!crcResult.valid) {
-      console.warn('[serialService] CRC 校验失败:',
-        '期望', crcResult.expected.toString(16).toUpperCase(),
-        '实际', crcResult.actual.toString(16).toUpperCase())
+      console.warn('[serialService] crc check failed:',
+        'expected', crcResult.expected.toString(16).toUpperCase(),
+        'actual', crcResult.actual.toString(16).toUpperCase())
     }
     
     // 解析帧内容
@@ -829,8 +863,12 @@ export function scanDevices(prefixes = ['/dev/ttyS', '/dev/ttyUSB', '/dev/ttyAMA
 let sendTimer = null
 let workingForce = 0
 let workingMode = 0
+let workingEpoch = 0
+let shutdownEpoch = 0
 let shutdownTimer = null   // stopForce() 关机序列 interval
 let shutdownTimeout = null // stopForce() 关机序列 timeout
+let shutdownPollingTimeout = null // stopForce() 保留轮询确认窗口 timeout
+let shutdownKeepPolling = false
 
 /**
  * 启动工作状态（周期发送 + 轮询读取）
@@ -846,32 +884,16 @@ export function startWorking(force, forceMode, sendInterval = 200) {
   
   workingForce = force
   workingMode = forceMode
+  workingEpoch = nextCommandEpoch()
   
   console.log('[serialService] 启动工作状态, force:', force, 'mode:', forceMode, 'interval:', sendInterval)
   
   // 启动发送定时器
   sendTimer = setInterval(() => {
-    if (!isConnected || portId === 0) {
-      console.warn('[serialService] 发送跳过：未连接')
-      return
-    }
-    
-    const frame = buildD180Frame({
-      force: workingForce,
-      forceMode: workingMode
-    })
-    
-    // 不等待，直接发送
-    writeSerial({
-      portId,
-      data: frame.hex,
-      format: 'hex',
-      timeout: 100,
-      success: () => {},
-      fail: (err) => {
-        console.error('[serialService] 周期发送失败:', err)
-      }
-    })
+    _sendD180Frame(workingForce, workingMode, workingEpoch, 'working')
+      .catch((err) => {
+        console.error('[serialService] working send failed:', err)
+      })
   }, sendInterval)
   
   // 启动轮询读取
@@ -881,13 +903,18 @@ export function startWorking(force, forceMode, sendInterval = 200) {
 /**
  * 停止工作状态
  */
-export function stopWorking() {
+export function stopWorking(options = {}) {
+  const keepPolling = !!options.keepPolling
+  nextCommandEpoch()
+  workingEpoch = 0
   if (sendTimer) {
     clearInterval(sendTimer)
     sendTimer = null
     console.log('[serialService] 发送定时器已停止')
   }
-  stopPolling()
+  if (!keepPolling) {
+    stopPolling()
+  }
 }
 
 /**
@@ -896,6 +923,26 @@ export function stopWorking() {
 function _cancelShutdownSequence() {
   if (shutdownTimer) { clearInterval(shutdownTimer); shutdownTimer = null }
   if (shutdownTimeout) { clearTimeout(shutdownTimeout); shutdownTimeout = null }
+  if (shutdownPollingTimeout) { clearTimeout(shutdownPollingTimeout); shutdownPollingTimeout = null }
+  shutdownEpoch = 0
+  shutdownKeepPolling = false
+}
+
+function _sendD180Frame(force, forceMode, epoch = null, logLabel = 'single') {
+  if (!isConnected || portId === 0) {
+    console.warn('[serialService] skip D180 send: serial not connected')
+    return Promise.resolve({ skipped: true, disconnected: true })
+  }
+
+  const frame = buildD180Frame({ force, forceMode })
+
+  console.log(`[serialService] ${logLabel} send`, { force, forceMode, hex: frame.hex })
+
+  return writeSerialDirect(frame.hex, {
+    format: 'hex',
+    timeout: 100,
+    epoch
+  })
 }
 
 /**
@@ -912,23 +959,74 @@ function _cancelShutdownSequence() {
  * @param {Object}  [options]
  * @param {number}  [options.duration=2000]  持续发送时长(ms)
  * @param {number}  [options.interval=200]   发送间隔(ms)
+ * @param {boolean} [options.keepPolling=false] 停力期间是否保留轮询读取
+ * @param {number}  [options.pollingDuration=duration] 轮询确认窗口时长(ms)
  */
-export function stopForce({ duration = 2000, interval = 200 } = {}) {
-  // 防止重叠：先取消上一次未结束的序列
+
+/*  stopForce 做的事情
+  - 先 _cancelShutdownSequence()
+  - 再 stopWorking()
+  - 然后立刻发 1 次 force=5, mode=OFF
+  - 接着开一个 setInterval，按 interval 持续补发 OFF
+  - 到 duration 后用 setTimeout 停掉这个序列 */
+export function stopForce({
+  duration = 2000,
+  interval = 200,
+  keepPolling = false,
+  pollingDuration = duration
+} = {}) {
+  const effectivePollingDuration = keepPolling
+    ? Math.max(duration, pollingDuration)
+    : duration
+  
   _cancelShutdownSequence()
-  // 停止周期发送
-  stopWorking()
-  // 立即发第一帧，不等 interval
-  sendOnce(5, FORCE_MODE.OFF)
-  // 持续发送
+  
+  stopWorking({ keepPolling })
+  shutdownEpoch = nextCommandEpoch()
+  shutdownKeepPolling = keepPolling
+  
+  _sendD180Frame(5, FORCE_MODE.OFF, shutdownEpoch, 'shutdown')
+    .catch((err) => {
+      console.error('[serialService] shutdown send failed:', err)
+    })
+  
   shutdownTimer = setInterval(() => {
-    sendOnce(5, FORCE_MODE.OFF)
+    _sendD180Frame(5, FORCE_MODE.OFF, shutdownEpoch, 'shutdown')
+      .catch((err) => {
+        console.error('[serialService] shutdown send failed:', err)
+      })
   }, interval)
   shutdownTimeout = setTimeout(() => {
-    _cancelShutdownSequence()
+    if (shutdownTimer) { clearInterval(shutdownTimer); shutdownTimer = null }
+    if (shutdownTimeout) { clearTimeout(shutdownTimeout); shutdownTimeout = null }
     console.log('[serialService] 停力序列结束')
+    if (!shutdownKeepPolling || effectivePollingDuration <= duration) {
+      if (shutdownPollingTimeout) { clearTimeout(shutdownPollingTimeout); shutdownPollingTimeout = null }
+      shutdownEpoch = 0
+      shutdownKeepPolling = false
+      stopPolling()
+    }
   }, duration)
-  console.log('[serialService] 停力序列启动, duration:', duration, 'ms, interval:', interval, 'ms')
+  if (keepPolling && effectivePollingDuration > duration) {
+    shutdownPollingTimeout = setTimeout(() => {
+      shutdownPollingTimeout = null
+      shutdownEpoch = 0
+      shutdownKeepPolling = false
+      stopPolling()
+      console.log('[serialService] 停力确认读取窗口结束')
+    }, effectivePollingDuration)
+  }
+  console.log(
+    '[serialService] 停力序列启动, duration:',
+    duration,
+    'ms, interval:',
+    interval,
+    'ms, keepPolling:',
+    keepPolling,
+    'pollingDuration:',
+    effectivePollingDuration,
+    'ms'
+  )
 }
 
 /**
@@ -967,25 +1065,10 @@ export function updateWorkingForce(force, forceMode) {
  * @param {number} forceMode - 力量模式
  */
 export function sendOnce(force, forceMode) {
-  if (!isConnected || portId === 0) {
-    console.warn('[serialService] 单次发送跳过：未连接')
-    return
-  }
-  
-  const frame = buildD180Frame({ force, forceMode })
-  
-  console.log('[serialService] 单次发送:', { force, forceMode, hex: frame.hex })
-  
-  writeSerial({
-    portId,
-    data: frame.hex,
-    format: 'hex',
-    timeout: 100,
-    success: () => {},
-    fail: (err) => {
-      console.error('[serialService] 单次发送失败:', err)
-    }
-  })
+  _sendD180Frame(force, forceMode, commandEpoch, 'single')
+    .catch((err) => {
+      console.error('[serialService] single send failed:', err)
+    })
 }
 
 /**

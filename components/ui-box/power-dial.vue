@@ -29,7 +29,7 @@
 		<image class="dial-decoration" src="/static/icons/freeTrainingActivity/ic_decoration.png" mode="aspectFit" />
 
 		<!-- 中心按钮：关机状态显示电源图标 -->
-		<view v-if="!powerOn" class="dial-center-btn" @tap.stop="onPowerTap">
+		<view v-if="!viewPowerOn" class="dial-center-btn" @tap.stop="onPowerTap">
 			<image class="power-icon" src="/static/icons/freeTrainingActivity/ic_power.svg" mode="aspectFit" />
 		</view>
 		
@@ -47,6 +47,21 @@
  * 逻辑层：负责数据管理和与父组件通信
  */
 let instanceCounter = 0
+const POWER_DIAL_TRACE_ENABLED = true
+
+function formatTraceTime(ts = Date.now()) {
+	const date = new Date(ts)
+	const h = String(date.getHours()).padStart(2, '0')
+	const m = String(date.getMinutes()).padStart(2, '0')
+	const s = String(date.getSeconds()).padStart(2, '0')
+	const ms = String(date.getMilliseconds()).padStart(3, '0')
+	return `${h}:${m}:${s}.${ms}`
+}
+
+function tracePowerDial(event, payload = {}) {
+	if (!POWER_DIAL_TRACE_ENABLED) return
+	console.log(`[powerDialTrace ${formatTraceTime()}] ${event}`, payload)
+}
 
 export default {
 	name: 'PowerDial',
@@ -67,6 +82,14 @@ export default {
 			type: Boolean,
 			default: false
 		},
+		controlledPower: {
+			type: Boolean,
+			default: false
+		},
+		powerOn: {
+			type: Boolean,
+			default: false
+		},
 		initialPowerOn: {
 			type: Boolean,
 			default: false
@@ -76,10 +99,10 @@ export default {
 			default: '恒力'
 		}
 	},
-	emits: ['update:modelValue', 'change', 'powerChange'],
+	emits: ['update:modelValue', 'change', 'powerChange', 'requestPowerChange'],
 	data() {
 		return {
-			powerOn: this.initialPowerOn,
+			internalPowerOn: this.initialPowerOn,
 			dragValue: this.modelValue,
 			isDragging: false,
 			dialId: `power-dial-${++instanceCounter}-${Date.now()}`
@@ -92,9 +115,12 @@ export default {
 				min: this.min,
 				max: this.max,
 				disabled: this.disabled,
-				powerOn: this.powerOn,
+				powerOn: this.viewPowerOn,
 				dialId: this.dialId
 			}
+		},
+		viewPowerOn() {
+			return this.controlledPower ? this.powerOn : this.internalPowerOn
 		},
 		displayValue() {
 			return this.isDragging ? this.dragValue : this.modelValue
@@ -107,21 +133,43 @@ export default {
 			}
 		},
 		initialPowerOn(newVal) {
-			this.powerOn = newVal
+			if (!this.controlledPower) {
+				this.internalPowerOn = newVal
+			}
 		}
 	},
 	methods: {
 		// 开关按钮点击
 		onPowerTap() {
-			this.powerOn = !this.powerOn
-			
-			if (!this.powerOn) {
-				// 关机：力量归零
-				this.dragValue = this.min
-				this.$emit('update:modelValue', this.min)
+			if (this.disabled) return
+			const previousPower = this.viewPowerOn
+			const nextPower = !previousPower
+
+			if (!this.controlledPower) {
+				this.internalPowerOn = nextPower
+				
+				if (!nextPower) {
+					// 关机：力量归零
+					this.dragValue = this.min
+					this.$emit('update:modelValue', this.min)
+				}
 			}
-			
-			this.$emit('powerChange', this.powerOn)
+
+			tracePowerDial('tap power button', {
+				previousPower,
+				nextPower,
+				controlledPower: this.controlledPower,
+				modelValue: this.modelValue,
+				dragValue: this.dragValue,
+				min: this.min
+			})
+
+			if (this.controlledPower) {
+				this.$emit('requestPowerChange', nextPower)
+				return
+			}
+
+			this.$emit('powerChange', nextPower)
 		},
 		
 		// renderjs 回调（仅 touchend 时调用）
@@ -139,7 +187,12 @@ export default {
 		
 		// 暴露方法
 		setPower(on) {
-			this.powerOn = on
+			if (this.controlledPower) {
+				this.$emit('requestPowerChange', on)
+				return
+			}
+
+			this.internalPowerOn = on
 			if (!on) {
 				this.dragValue = this.min
 				this.$emit('update:modelValue', this.min)
@@ -147,13 +200,13 @@ export default {
 			this.$emit('powerChange', on)
 		},
 		setValue(val) {
-			if (!this.powerOn) return
+			if (!this.viewPowerOn) return
 			const clamped = Math.max(this.min, Math.min(val, this.max))
 			this.dragValue = clamped
 			this.$emit('update:modelValue', clamped)
 		},
 		getPower() {
-			return this.powerOn
+			return this.viewPowerOn
 		},
 		getValue() {
 			return this.modelValue

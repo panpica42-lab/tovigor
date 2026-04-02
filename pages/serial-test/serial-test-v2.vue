@@ -14,6 +14,14 @@
     </view>
     
     <!-- 设备选择 -->
+    <view class="tool-card" @click="openChartTest">
+      <view class="tool-card-copy">
+        <text class="tool-card-title">Qiun Chart Test</text>
+        <text class="tool-card-hint">Open a minimal page to verify qiun-data-charts rendering</text>
+      </view>
+      <text class="tool-card-arrow">></text>
+    </view>
+
     <view class="section">
       <text class="section-title">1. 设备配置</text>
       <view class="form-item">
@@ -766,6 +774,12 @@ const toggleFrameDetail = () => {
   showFrameDetail.value = !showFrameDetail.value
 }
 
+const openChartTest = () => {
+  uni.navigateTo({
+    url: '/pages/serial-test/chart-test'
+  })
+}
+
 const onBaudRateChange = (e) => {
   baudRateIndex.value = e.detail.value
 }
@@ -798,6 +812,44 @@ const formatTime = (timestamp) => {
   font-size: 40rpx;
   font-weight: bold;
   color: #fff;
+}
+
+.tool-card {
+  background-color: #fff;
+  border-radius: 20rpx;
+  padding: 26rpx 30rpx;
+  margin-bottom: 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 2rpx solid #dbeafe;
+  box-shadow: 0 6rpx 18rpx rgba(37, 99, 235, 0.08);
+}
+
+.tool-card-copy {
+  flex: 1;
+  padding-right: 20rpx;
+}
+
+.tool-card-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1d4ed8;
+  margin-bottom: 8rpx;
+}
+
+.tool-card-hint {
+  display: block;
+  font-size: 24rpx;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.tool-card-arrow {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: #1d4ed8;
 }
 
 .section {

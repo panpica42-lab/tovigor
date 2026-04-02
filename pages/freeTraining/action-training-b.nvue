@@ -10,6 +10,12 @@
  * z-index 分层：
  *   小窗：sw-layout(3) < video(8) < video-touch(9)
  *   全屏：video(1) < video-touch(4) < fs-layout(7) < modal(20)
+ *
+ * 页面流程状态：
+ *   idle           空闲态，尚未开始训练，或用户主动停止训练后回到待机状态
+ *   training       训练态，设备持续输出力量，串口帧会更新计数/时长，并判定当前动作是否完成
+ *   transitioning  动作切换态，当前动作已完成，正在弹窗倒计时等待进入下一个动作；此时不再响应“当前动作完成”的重复结算
+ *   completed      全部动作完成态，训练流程结束，页面只展示完成弹窗，不再继续输出力量或推进动作
 -->
 <template>
 	<view class="container" :style="containerStyle">
@@ -176,22 +182,53 @@
 			</view>
 		</view>
 
+		<view v-if="showActionTransitionModal" class="modal-mask" :style="modalStyle">
+			<view class="modal-card set-confirm-modal">
+				<text class="set-confirm-title">当前动作已完成</text>
+				<text class="set-confirm-text">已完成《{{ currentActionName }}》</text>
+				<text class="set-confirm-text set-confirm-text--sub">{{ nextActionCountdown }}s 后开始下一个动作：《{{ pendingNextActionName }}》</text>
+				<view class="set-confirm-actions set-confirm-actions--single">
+					<view class="set-confirm-btn set-confirm-btn--confirm set-confirm-btn--single" @click="handleStartNextActionNow">
+						<text class="set-confirm-btn-text">直接开始</text>
+					</view>
+				</view>
+			</view>
+		</view>
+
 		<ModalBase
-			v-model:visible="showSetConfirmModal"
+			v-model:visible="showExitConfirmModal"
 			:width="560"
 			:border-radius="28"
 			:close-on-click-overlay="false"
 		>
 			<view class="set-confirm-modal">
-				<text class="set-confirm-title">本组已完成</text>
-				<text class="set-confirm-text">已完成 {{ completedSetLabel }} 组，是否继续训练？</text>
-				<text class="set-confirm-text set-confirm-text--sub">继续训练将保持力量输出，休息将关闭力量。</text>
+				<text class="set-confirm-title">确认返回？</text>
+				<text class="set-confirm-text">当前训练时间过短</text>
+				<text class="set-confirm-text">无法生成系统的训练报告</text>
+				<text class="set-confirm-text">直接退出不保留此次训练数据</text>
 				<view class="set-confirm-actions">
-					<view class="set-confirm-btn set-confirm-btn--cancel" @click="handleRestTraining">
-						<text class="set-confirm-btn-text set-confirm-btn-text--dark">休息</text>
+					<view class="set-confirm-btn set-confirm-btn--cancel" @click="handleCancelLeavePage">
+						<text class="set-confirm-btn-text set-confirm-btn-text--dark">取消</text>
 					</view>
-					<view class="set-confirm-btn set-confirm-btn--confirm" @click="handleContinueTraining">
-						<text class="set-confirm-btn-text">继续训练</text>
+					<view class="set-confirm-btn set-confirm-btn--confirm" @click="handleConfirmLeavePage">
+						<text class="set-confirm-btn-text">关闭力量并返回</text>
+					</view>
+				</view>
+			</view>
+		</ModalBase>
+
+		<ModalBase
+			v-model:visible="showTrainingCompleteModal"
+			:width="560"
+			:border-radius="28"
+			:close-on-click-overlay="false"
+		>
+			<view class="set-confirm-modal">
+				<text class="set-confirm-title">训练已完成</text>
+				<text class="set-confirm-text">你已完成全部预设训练动作。</text>
+				<view class="set-confirm-actions set-confirm-actions--single">
+					<view class="set-confirm-btn set-confirm-btn--confirm set-confirm-btn--single" @click="goToActionLibrary">
+						<text class="set-confirm-btn-text set-confirm-btn-text--single" lines="1">返回动作库</text>
 					</view>
 				</view>
 			</view>
@@ -206,8 +243,17 @@ import nvueSerialMixin from '@/utils/nvueSerialMixin.js'
 
 // 静态常量，避免放入 data 后被 Vue 做响应式代理
 const VIDEO_SRC = '/static/icons/general/video-placeholder.mp4'
-const FALLBACK_MODE = { key: 'FLUID', label: '流体阻力' }
+// 缺少动作模式配置时，默认按恒力模式处理
+const FALLBACK_MODE = { key: 'CONST', label: '恒力' }
 const FALLBACK_RESISTANCE = 15
+const NEXT_ACTION_DELAY_MS = 10000
+const NEXT_ACTION_DELAY_SECONDS = NEXT_ACTION_DELAY_MS / 1000
+const TRAINING_FLOW = {
+	IDLE: 'idle',
+	TRAINING: 'training',
+	TRANSITIONING: 'transitioning',
+	COMPLETED: 'completed'
+}
 
 export default {
 	components: {
@@ -243,9 +289,18 @@ export default {
 			lastTapTs: 0,
 
 			trainingActions: [],
+			TRAINING_FLOW,
+			trainingFlow: TRAINING_FLOW.IDLE,
 			currentActionIndex: 0,
 			showSafetyModal: true,
-			showSetConfirmModal: false,
+			showActionTransitionModal: false,
+			showExitConfirmModal: false,
+			showTrainingCompleteModal: false,
+			allowPageLeave: false,
+			pendingNextActionIndex: -1,
+			nextActionCountdown: NEXT_ACTION_DELAY_SECONDS,
+			nextActionDeadlineTs: 0,
+			nextActionCountdownTimer: null,
 
 			dialValue: FALLBACK_RESISTANCE,
 			lastForce: FALLBACK_RESISTANCE,
@@ -254,14 +309,12 @@ export default {
 			statBoard: {
 				sets: '01/00',
 				duration: '00:00:00',
-				calories: '00'
+				calories: '00.00'
 			},
 
 			setCount: 0,
 			countBaseline: 0,
 			needCaptureBaseline: false,
-			pendingCompletedSetCount: 0,
-			pendingBaselineSportCount: 0,
 			activeSeconds: 0,
 			lastActiveTs: 0,
 			activeTimer: null
@@ -321,7 +374,7 @@ export default {
 
 		currentForceModeValue() {
 			const modeKey = this.currentActionMode.key
-			return this.$FORCE_MODE[modeKey] !== undefined ? this.$FORCE_MODE[modeKey] : this.$FORCE_MODE.FLUID
+			return this.$FORCE_MODE[modeKey] !== undefined ? this.$FORCE_MODE[modeKey] : this.$FORCE_MODE[FALLBACK_MODE.key]
 		},
 
 		currentDefaultResistance() {
@@ -345,17 +398,22 @@ export default {
 			return value
 		},
 
+		hasNextAction() {
+			return this.currentActionIndex < this.trainingActions.length - 1
+		},
+
+		pendingNextActionName() {
+			const action = this.trainingActions[this.pendingNextActionIndex]
+			return action ? action.name : ''
+		},
+
 		modeName() {
 			return this.currentActionMode.label
 		},
 
-		completedSetLabel() {
-			const completed = this.pendingCompletedSetCount || (this.setCount + 1)
-			return this.fmt2(completed) + '/' + this.fmt2(this.currentTargetSets)
-		},
-
 		currentTrainingSetLabel() {
-			return this.fmt2(this.setCount + 1)
+			const currentSet = Math.min(this.setCount + 1, this.currentTargetSets)
+			return this.fmt2(Math.max(1, currentSet))
 		},
 
 		powerBtnStyle() {
@@ -401,6 +459,13 @@ export default {
 		})
 	},
 
+	onBackPress() {
+		if (this.allowPageLeave) return false
+		if (!this.shouldConfirmLeavePage()) return false
+		this.showExitConfirmModal = true
+		return true
+	},
+
 	mounted() {
 		// 串口连接由 nvueSerialMixin 自动处理
 		this.$serial.on('frame', this.handleFrame)
@@ -416,6 +481,7 @@ export default {
 			try { this.videoCtx.pause() } catch (e) { /* ignore */ }
 			this.videoCtx = null
 		}
+		this.clearNextActionTimers()
 		if (this.activeTimer) { clearInterval(this.activeTimer); this.activeTimer = null }
 		this.$serial.off('frame', this.handleFrame)
 		if (this.powerOn) {
@@ -425,51 +491,172 @@ export default {
 	},
 
 	methods: {
-		goBack() { uni.navigateBack() },
+		goBack() {
+			if (!this.shouldConfirmLeavePage()) {
+				uni.navigateBack()
+				return
+			}
+			this.showExitConfirmModal = true
+		},
 
+		// 只有训练中或动作切换中才拦截返回，空闲态允许直接离开
+		shouldConfirmLeavePage() {
+			return this.powerOn || this.trainingFlow === TRAINING_FLOW.TRAINING || this.trainingFlow === TRAINING_FLOW.TRANSITIONING
+		},
+
+		// 取消离开时仅关闭确认框，不影响当前训练状态
+		handleCancelLeavePage() {
+			this.showExitConfirmModal = false
+		},
+
+		// 确认离开时先安全停力并清理动作切换状态，再放行返回
+		handleConfirmLeavePage() {
+			this.showExitConfirmModal = false
+			if (this.trainingFlow === TRAINING_FLOW.TRANSITIONING) {
+				this.resetNextActionTransitionState()
+			}
+			if (this.powerOn) {
+				this.doPowerOff()
+			}
+			this.allowPageLeave = true
+			uni.navigateBack()
+		},
+
+		// 训练完成后统一从这里返回动作库，避免遗留力量输出
+		goToActionLibrary() {
+			if (this.powerOn) {
+				this.$serial.stopForce()
+			}
+			uni.redirectTo({
+				url: '/pages/freeTraining/action-library'
+			})
+		},
+
+		// 当前动作切换时，只有在未开机状态下才允许同步默认阻力
 		syncCurrentActionConfig() {
 			if (this.powerOn) return
 			this.dialValue = this.currentDefaultResistance
 			this.lastForce = this.currentDefaultResistance
 		},
 
+		// 进入新动作时重置组数、计数基线和看板显示
+		resetCurrentActionTrainingState() {
+			this.setCount = 0
+			this.countBaseline = 0
+			this.needCaptureBaseline = true
+			this.statBoard = {
+				sets: '01/00',
+				duration: this.formatTime(this.activeSeconds),
+				calories: this.statBoard.calories
+			}
+		},
+
+		// 看板显示统一走这里，顺带兜底负次数和空热量
 		updateStatBoard(currentCount, caloriesRaw) {
+			const safeCount = Math.max(0, Number(currentCount) || 0)
 			const caloriesText = caloriesRaw === undefined || caloriesRaw === null
 				? this.statBoard.calories
-				: (caloriesRaw / 1000).toFixed(0)
+				: (caloriesRaw / 1000).toFixed(2)
 			this.statBoard = {
-				sets: this.currentTrainingSetLabel + '/' + this.fmt2(currentCount),
+				sets: this.currentTrainingSetLabel + '/' + this.fmt2(safeCount),
 				duration: this.formatTime(this.activeSeconds),
 				calories: caloriesText
 			}
 		},
 
+		// 动作切换倒计时只保留一个 interval，避免重复启动
+		clearNextActionTimers() {
+			if (this.nextActionCountdownTimer) {
+				clearInterval(this.nextActionCountdownTimer)
+				this.nextActionCountdownTimer = null
+			}
+			this.nextActionDeadlineTs = 0
+		},
+
+		// 切换完成后统一清理待切换动作索引、倒计时和弹窗状态
+		resetNextActionTransitionState() {
+			this.clearNextActionTimers()
+			this.pendingNextActionIndex = -1
+			this.nextActionCountdown = NEXT_ACTION_DELAY_SECONDS
+			this.showActionTransitionModal = false
+		},
+
+		// 倒计时显示基于 deadline 计算，避免状态重入时被简单自减搞乱
+		syncNextActionCountdown() {
+			if (!this.nextActionDeadlineTs) {
+				this.nextActionCountdown = NEXT_ACTION_DELAY_SECONDS
+				return
+			}
+			const remainMs = Math.max(0, this.nextActionDeadlineTs - Date.now())
+			this.nextActionCountdown = Math.ceil(remainMs / 1000)
+		},
+
+		// 当前动作完成后进入切换态，由这里启动下一个动作的倒计时
+		startNextActionCountdown() {
+			this.clearNextActionTimers()
+			this.nextActionDeadlineTs = Date.now() + NEXT_ACTION_DELAY_MS
+			this.syncNextActionCountdown()
+			this.nextActionCountdownTimer = setInterval(() => {
+				this.syncNextActionCountdown()
+				if (this.nextActionCountdown <= 0) {
+					this.beginNextAction()
+				}
+			}, 250)
+		},
+
+		// 手动跳过剩余倒计时，直接切到下一个动作
+		handleStartNextActionNow() {
+			if (this.trainingFlow !== TRAINING_FLOW.TRANSITIONING) return
+			this.beginNextAction()
+		},
+
+		// 切换到下一动作时，先重置旧动作的过渡状态，再按新动作配置重启训练
+		beginNextAction() {
+			if (this.trainingFlow !== TRAINING_FLOW.TRANSITIONING) return
+			const nextActionIndex = this.pendingNextActionIndex
+			if (nextActionIndex < 0 || nextActionIndex >= this.trainingActions.length) return
+			this.resetNextActionTransitionState()
+			this.currentActionIndex = nextActionIndex
+			this.dialValue = this.currentDefaultResistance
+			this.lastForce = this.currentDefaultResistance
+			this.resetCurrentActionTrainingState()
+			this.trainingFlow = TRAINING_FLOW.TRAINING
+			if (this.powerOn) {
+				this.$serial.startWorking(this.dialValue, this.currentForceModeValue, 200)
+				return
+			}
+			this.doPowerOn()
+		},
+
+		// 一个动作真正结束时，只允许从 training 流程推进到 transitioning 或 completed
+		handleActionFinished() {
+			if (this.trainingFlow !== TRAINING_FLOW.TRAINING) return
+			if (this.hasNextAction) {
+				this.pendingNextActionIndex = this.currentActionIndex + 1
+				this.trainingFlow = TRAINING_FLOW.TRANSITIONING
+				this.showActionTransitionModal = true
+				this.startNextActionCountdown()
+				return
+			}
+			this.trainingFlow = TRAINING_FLOW.COMPLETED
+			if (this.powerOn) {
+				this.doPowerOff()
+			}
+			this.showTrainingCompleteModal = true
+		},
+
+		// 达到一组目标次数后，要么进下一组，要么结束当前动作
 		handleSetCompleted(currentSportCount, caloriesRaw) {
-			if (this.showSetConfirmModal) return
-			this.pendingCompletedSetCount = this.setCount + 1
-			this.pendingBaselineSportCount = currentSportCount
-			this.updateStatBoard(this.currentTargetReps, caloriesRaw)
-			this.showSetConfirmModal = true
-		},
-
-		applySetCompletion() {
-			this.setCount = this.pendingCompletedSetCount || (this.setCount + 1)
-			this.countBaseline = this.pendingBaselineSportCount
+			const completedSetCount = this.setCount + 1
+			if (completedSetCount >= this.currentTargetSets) {
+				this.updateStatBoard(this.currentTargetReps, caloriesRaw)
+				this.handleActionFinished()
+				return
+			}
+			this.setCount = completedSetCount
+			this.countBaseline = currentSportCount
 			this.needCaptureBaseline = false
-			this.pendingCompletedSetCount = 0
-			this.pendingBaselineSportCount = 0
-			this.updateStatBoard(0, null)
-		},
-
-		handleContinueTraining() {
-			this.applySetCompletion()
-			this.showSetConfirmModal = false
-		},
-
-		handleRestTraining() {
-			this.applySetCompletion()
-			this.showSetConfirmModal = false
-			this.doPowerOff()
+			this.updateStatBoard(0, caloriesRaw)
 		},
 
 		// 安全获取/创建 videoCtx，nvue 下需要传 this 作为第二参数
@@ -549,14 +736,22 @@ export default {
 			if (this.powerOn) this.$serial.updateWorkingForce(val)
 		},
 
-		togglePower() { this.powerOn ? this.doPowerOff() : this.doPowerOn() },
+		// 切换态禁止用户手动重新开机，避免和自动切动作打架
+		togglePower() {
+			if (!this.powerOn && this.trainingFlow === TRAINING_FLOW.TRANSITIONING) return
+			this.powerOn ? this.doPowerOff() : this.doPowerOn()
+		},
 
+		// 开机后进入 training 态，并等待第一帧重新抓取本组基线
 		doPowerOn() {
 			// startWorking 内部会自动取消进行中的关机序列
+			if (this.activeTimer) {
+				clearInterval(this.activeTimer)
+				this.activeTimer = null
+			}
 			this.powerOn = true
+			this.trainingFlow = TRAINING_FLOW.TRAINING
 			this.needCaptureBaseline = true
-			this.pendingCompletedSetCount = 0
-			this.pendingBaselineSportCount = 0
 			this.lastActiveTs = 0
 			this.activeTimer = setInterval(() => {
 				if (this.lastActiveTs > 0 && Date.now() - this.lastActiveTs < 2000) this.activeSeconds++
@@ -564,11 +759,18 @@ export default {
 			this.$serial.startWorking(this.dialValue, this.currentForceModeValue, 200)
 		},
 
+		// 关机时顺便清理活动计时器；若当前在切换态，也要取消过渡状态
 		doPowerOff() {
 			this.powerOn = false
 			if (this.activeTimer) { clearInterval(this.activeTimer); this.activeTimer = null }
+			if (this.trainingFlow === TRAINING_FLOW.TRANSITIONING) {
+				this.resetNextActionTransitionState()
+			}
 			this.$serial.stopForce()  // 安全停力，持续发送 OFF 确保下位机收到
 			this.dialValue = this.lastForce
+			if (this.trainingFlow !== TRAINING_FLOW.COMPLETED) {
+				this.trainingFlow = TRAINING_FLOW.IDLE
+			}
 		},
 
 		// 记录视频当前播放进度
@@ -642,21 +844,24 @@ export default {
 			}
 		},
 
+		// 串口帧入口：只在 training 态更新看板、维护基线，并判定一组是否完成
 		handleFrame(data) {
 			const p = data.parsed
 			if (!p) return
-			if (this.needCaptureBaseline) { 
-                this.countBaseline = p.sportCount;
-                 this.needCaptureBaseline = false }
-			
-            if (Math.abs(p.left.speed) > 10 || Math.abs(p.right.speed) > 10) this.lastActiveTs = Date.now()
-			const currentCount = p.sportCount - this.countBaseline
-			if (this.showSetConfirmModal) {
-				this.updateStatBoard(this.currentTargetReps, p.calories)
-				return
+			if (this.trainingFlow !== TRAINING_FLOW.TRAINING || !this.powerOn) return
+			if (this.needCaptureBaseline) {
+				this.countBaseline = p.sportCount
+				this.needCaptureBaseline = false
+			}
+			if (Math.abs(p.left.speed) > 10 || Math.abs(p.right.speed) > 10) this.lastActiveTs = Date.now()
+			let currentCount = p.sportCount - this.countBaseline
+			// 设备计数若发生清零或回卷，立刻重抓基线，避免看板出现负数
+			if (currentCount < 0) {
+				this.countBaseline = p.sportCount
+				currentCount = 0
 			}
 			this.updateStatBoard(currentCount, p.calories)
-			if (this.powerOn && !this.showSetConfirmModal && currentCount >= this.currentTargetReps) {
+			if (currentCount >= this.currentTargetReps) {
 				this.handleSetCompleted(p.sportCount, p.calories)
 			}
 		},
@@ -898,6 +1103,15 @@ export default {
 	margin-top: 28rpx;
 }
 
+.set-confirm-actions--single {
+	justify-content: center;
+}
+
+.set-confirm-actions--single .set-confirm-btn {
+	height: 72rpx;
+	border-radius: 18rpx;
+}
+
 .set-confirm-btn {
 	width: 230rpx;
 	height: 84rpx;
@@ -914,6 +1128,15 @@ export default {
 	background-color: #4CAF50;
 }
 
+.set-confirm-btn--single {
+	width: 320rpx;
+}
+
+.set-confirm-btn-text--single {
+	font-size: 24rpx;
+	text-align: center;
+}
+
 .set-confirm-btn-text {
 	font-size: 28rpx;
 	font-weight: bold;
@@ -923,4 +1146,5 @@ export default {
 .set-confirm-btn-text--dark {
 	color: #333333;
 }
+
 </style>

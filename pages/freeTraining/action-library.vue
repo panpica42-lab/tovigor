@@ -107,7 +107,7 @@ const actionList = ref([
 		part: 'back',
 		defaultMode: FORCE_MODE_PRESETS.CONST,
 		defaultResistance: 15,
-		recommendedSets: 4,
+		recommendedSets: 2,
 		recommendedReps: 3
 	},
 	{
@@ -116,9 +116,9 @@ const actionList = ref([
 		cover: '/static/icons/freeTrainingActivity/action-library/ic_action_02.jpg',
 		part: 'arm',
 		defaultMode: FORCE_MODE_PRESETS.CONST,
-		defaultResistance: 14,
-		recommendedSets: 3,
-		recommendedReps: 10
+		defaultResistance: 15,
+		recommendedSets: 2,
+		recommendedReps: 3
 	},
 	{
 		id: 3,

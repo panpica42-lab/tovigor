@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is a `uni-app` application built on Vue 2. Core entry files live at the root: `main.js`, `App.vue`, `pages.json`, `manifest.json`, and `uni.scss`.
+This repository is a `uni-app` application built on Vue 3 and maintained primarily in HBuilderX. Core entry files live at the root: `main.js`, `App.vue`, `pages.json`, `manifest.json`, and `uni.scss`.
 
 - `pages/`: page-level views grouped by feature, such as `freeTraining/`, `partTraining/`, `smartAssess/`, `games/`, and `serial-test/`.
 - `components/`: shared UI, including modal and layout primitives.
@@ -12,24 +12,29 @@ This repository is a `uni-app` application built on Vue 2. Core entry files live
 
 Register new routes in `pages.json` and keep feature-specific components close to the page that uses them when reuse is limited.
 
-## Build, Test, and Development Commands
-- `npm install`: install project dependencies.
-- `npm run serve`: alias for local H5 development.
-- `npm run dev:h5`: start the Vue CLI dev server for browser testing.
-- `npm run build:h5`: create the production H5 build.
-
-Example:
-```bash
-npm run dev:h5
-```
+## Development Workflow
+- Use HBuilderX as the primary development and build environment.
+- Main target platform is Android App.
+- H5 should be treated as a preview/debug surface, not the source of truth for hardware behavior.
+- Do not treat `npm` scripts as the standard workflow for this repository.
 
 ## Coding Style & Naming Conventions
 Follow the existing style: tab indentation in `.js`, `.vue`, and JSON-like config files. Use single quotes in JavaScript unless the file already differs. Prefer `camelCase` for variables and functions, `PascalCase` for globally registered components, and kebab-case file names for page and component `.vue` files such as `free-training-intro.vue`.
 
 Keep page logic feature-local when possible. Shared device or business logic belongs in `utils/` or a reusable component.
 
+## Vue Conventions
+- Treat this repository as a Vue 3 uni-app project.
+- Prefer Composition API and `<script setup>` in `.vue` pages and components.
+- Keep the app entry aligned with Vue 3 `createSSRApp`.
+- Do not introduce new Vue 2 patterns such as `new Vue(...)` in active code.
+
 ## Encoding Rules
 Treat all Chinese text in this repository as UTF-8. When editing `.vue`, `.nvue`, `.js`, or `.md` files that contain Chinese comments, UI copy, or logs, preserve readable Chinese and do not introduce mojibake or replacement text.
+
+When reading files that may contain Chinese text, always use an explicit UTF-8 decoding path. Do not rely on terminal, shell, or operating-system default encodings when inspecting repository contents.
+
+On Windows PowerShell, treat the default decoding behavior as unsafe for UTF-8 files without BOM. When using commands such as `Get-Content`, explicitly specify `-Encoding UTF8`, or read bytes and decode them as UTF-8 before trusting the displayed text.
 
 If a file already contains garbled Chinese, do not continue editing those broken strings blindly. First confirm the intended text, then repair or replace it in valid UTF-8 before making further content changes.
 
@@ -41,7 +46,7 @@ For floating controls on `nvue` pages, prefer page-local implementations over re
 When adjusting `nvue` fullscreen interactions, preserve the event-receiving structure and layer order whenever possible. Seemingly harmless layout or `z-index` refactors can change gesture hit-testing and break double-tap behavior. Verify `nvue` interaction changes on a real Android device before considering the task complete.
 
 ## Testing Guidelines
-There is no automated test suite configured in `package.json` yet. Validate changes by running `npm run dev:h5` for local checks and `npm run build:h5` before submitting larger changes. For hardware-related work, use the serial test pages under `pages/serial-test/` and document manual verification steps in your PR.
+There is no automated test suite configured in this repository. Validate UI and navigation changes in HBuilderX. For hardware-related work, use the serial test pages under `pages/serial-test/` and document manual verification steps.
 
 ## Commit & Pull Request Guidelines
 Recent history favors concise, purpose-first commits, commonly with prefixes like `feat:`, `refactor:`, and `docs:`. Keep commits scoped to one change set and use imperative summaries, for example `feat: add action selection dialog`.

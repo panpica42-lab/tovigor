@@ -1,33 +1,7 @@
 {
   "name": "tovigor-uniapp",
   "version": "1.0.0",
-  "description": "Tovigor健身应用",
-  "main": "main.js",
-  "scripts": {
-    "serve": "npm run dev:h5",
-    "dev:h5": "cross-env NODE_ENV=development UNI_PLATFORM=h5 vue-cli-service serve",
-    "build:h5": "cross-env NODE_ENV=production UNI_PLATFORM=h5 vue-cli-service build"
-  },
-  "dependencies": {
-    "@dcloudio/uni-app": "^2.0.0",
-    "@dcloudio/uni-h5": "^2.0.0",
-    "@dcloudio/uni-mp-weixin": "^2.0.0",
-    "vue": "^2.6.14",
-    "vuex": "^3.6.2"
-  },
-  "devDependencies": {
-    "@dcloudio/types": "^2.0.0",
-    "@dcloudio/uni-cli-shared": "^2.0.0",
-    "@dcloudio/webpack-uni-mp-loader": "^2.0.0",
-    "@vue/cli-service": "^4.5.15",
-    "cross-env": "^7.0.3",
-    "vue-template-compiler": "^2.6.14"
-  },
-  "browserslist": [
-    "Android >= 4.4",
-    "ios >= 9"
-  ],
-  "uni-app": {
-    "scripts": {}
-  }
+  "private": true,
+  "description": "Tovigor fitness app built with uni-app Vue 3 and maintained in HBuilderX",
+  "main": "main.js"
 }

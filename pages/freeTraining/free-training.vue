@@ -52,7 +52,50 @@
 		
 		<!-- 力量曲线面板（占位图） -->
 		<view class="force-curve-panel">
-			<image class="force-curve-img" src="/static/icons/freeTrainingActivity/force-curve-fake.jpg" mode="aspectFit"></image>
+			<view class="force-curve-head">
+				<view class="force-curve-copy">
+					<text class="force-curve-title">拉绳长度</text>
+					<view class="force-curve-legend">
+						<view class="force-curve-legend-item">
+							<view class="force-curve-dot force-curve-dot--history"></view>
+							<text class="force-curve-legend-text">已完成</text>
+						</view>
+						<view class="force-curve-legend-item">
+							<view class="force-curve-dot force-curve-dot--live"></view>
+							<text class="force-curve-legend-text">当前</text>
+						</view>
+					</view>
+				</view>
+				<view class="force-curve-metric">
+					<text class="force-curve-metric-label">{{ liveBarVisible ? '当前峰值' : '最近一次' }}</text>
+					<text class="force-curve-metric-value">{{ chartMetricText }}</text>
+				</view>
+			</view>
+			<view class="force-curve-chart-box">
+				<qiun-data-charts
+					class="force-curve-history-chart"
+					canvasId="freeTrainingLengthChart"
+					type="column"
+					style="width: 100%; height: 100%;"
+					:chartData="barChartData"
+					:opts="barChartOpts"
+					:animation="false"
+					background="transparent"
+				/>
+				<view v-if="liveBarVisible" class="force-curve-live-overlay">
+					<view
+						v-for="slotIndex in MAX_VISIBLE_BARS"
+						:key="`live-slot-${slotIndex}`"
+						class="force-curve-live-slot"
+					>
+						<view
+							v-if="slotIndex - 1 === liveBarSlotIndex"
+							class="force-curve-live-bar"
+							:style="liveBarStyle"
+						></view>
+					</view>
+				</view>
+			</view>
 		</view>
 		
 		<!-- 力量控制区：旋钮组件 -->
@@ -62,10 +105,13 @@
 				v-model="dialValue"
 				:min="5"
 				:max="55"
+				:disabled="pendingPowerAction !== null"
+				:controlled-power="true"
+				:power-on="powerOn"
 				:initial-power-on="false"
 				:mode-name="currentModeName"
 				@change="onDialChange"
-				@power-change="onPowerChange"
+				@request-power-change="onPowerRequest"
 			/>
 		</view>
 		
@@ -107,8 +153,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { onReady, onBackPress, onLoad } from '@dcloudio/uni-app'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { onBackPress, onLoad } from '@dcloudio/uni-app'
 import PowerDial from '@/components/ui-box/power-dial.vue'
 import serialService, { FORCE_MODE } from '@/utils/serialService.js'
 
@@ -128,6 +174,67 @@ const DEFAULT_FORCE = 15
 const dialValue = ref(DEFAULT_FORCE)
 let lastForce = DEFAULT_FORCE  // 力量记忆（页面销毁后失效）
 const powerOn = ref(false)
+const pendingPowerAction = ref(null)
+const POWER_TRACE_ENABLED = true
+const POWER_CONFIRM_TIMEOUT = 5000
+let powerActionSeq = 0
+let lastDeviceSetForce = null
+let lastDeviceSetForceMode = null
+let lastDeviceSleepState = null
+let pendingConfirmForce = null
+let pendingConfirmMode = null
+let pendingPowerTimeout = null
+
+function formatTraceTime(ts = Date.now()) {
+	const date = new Date(ts)
+	const h = String(date.getHours()).padStart(2, '0')
+	const m = String(date.getMinutes()).padStart(2, '0')
+	const s = String(date.getSeconds()).padStart(2, '0')
+	const ms = String(date.getMilliseconds()).padStart(3, '0')
+	return `${h}:${m}:${s}.${ms}`
+}
+
+function tracePower(event, payload = {}) {
+	if (!POWER_TRACE_ENABLED) return
+	console.log(`[freeTrainingTrace ${formatTraceTime()}] ${event}`, payload)
+}
+
+function getDialPowerState() {
+	const getter = powerDialRef.value?.getPower
+	return typeof getter === 'function' ? getter.call(powerDialRef.value) : null
+}
+
+function clearPendingPowerConfirm() {
+	if (pendingPowerTimeout) {
+		clearTimeout(pendingPowerTimeout)
+		pendingPowerTimeout = null
+	}
+	pendingPowerAction.value = null
+	pendingConfirmForce = null
+	pendingConfirmMode = null
+}
+
+function schedulePendingPowerConfirmTimeout(action) {
+	if (pendingPowerTimeout) {
+		clearTimeout(pendingPowerTimeout)
+	}
+	pendingPowerTimeout = setTimeout(() => {
+		pendingPowerTimeout = null
+		tracePower('power confirm timeout', {
+			action,
+			actionId: powerActionSeq,
+			pagePowerOn: powerOn.value,
+			dialPowerOn: getDialPowerState()
+		})
+		if (action === 'opening') {
+			serialService.stopWorking()
+		}
+		if (action === 'closing') {
+			serialService.stopReading()
+		}
+		clearPendingPowerConfirm()
+	}, POWER_CONFIRM_TIMEOUT)
+}
 
 // 模式列表（恒力排在最前面）
 const modes = ref([
@@ -196,6 +303,17 @@ let activeTimer = null       // 1 秒 setInterval
 // ==================== 辅助函数 ====================
 
 // 秒数 → HH:MM:SS
+let lastSportCount = null
+
+const MAX_DISTANCE_CM = 80
+const CHART_AXIS_MAX = 5
+const LIVE_BAR_TRIGGER_CM = 4
+const MAX_VISIBLE_BARS = 12
+const historyBars = ref([])
+const liveBarPeakCm = ref(0)
+const liveBarVisible = ref(false)
+const barChartData = ref(createBarChartData())
+
 function formatTime(totalSeconds) {
 	const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0')
 	const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0')
@@ -206,6 +324,56 @@ function formatTime(totalSeconds) {
 // 组数/次数 → "01/03" 格式
 function formatSets(sets, count) {
 	return `${String(sets).padStart(2, '0')}/${String(count).padStart(2, '0')}`
+}
+
+function toDistanceCm(rawDistance) {
+	const safeDistance = Math.max(0, Number(rawDistance) || 0)
+	return Number((safeDistance / 10).toFixed(1))
+}
+
+function clamp(value, min, max) {
+	return Math.max(min, Math.min(max, value))
+}
+
+function normalizeDistanceCm(distanceCm) {
+	const unitHeight = MAX_DISTANCE_CM / CHART_AXIS_MAX
+	return Number((clamp(distanceCm, 0, MAX_DISTANCE_CM) / unitHeight).toFixed(2))
+}
+
+function createPlaceholderBar() {
+	return {
+		distanceCm: 0,
+		placeholder: true
+	}
+}
+
+function createBarChartData() {
+	return {
+		categories: Array.from({ length: MAX_VISIBLE_BARS }, () => ''),
+		series: [
+			{
+				name: 'ropeLength',
+				data: Array.from({ length: MAX_VISIBLE_BARS }, () => ({
+					value: 0,
+					color: 'rgba(0,0,0,0)'
+				}))
+			}
+		]
+	}
+}
+
+function resetLiveBar() {
+	liveBarPeakCm.value = 0
+	liveBarVisible.value = false
+}
+
+function finalizeLiveBar() {
+	if (!liveBarVisible.value || liveBarPeakCm.value <= 0) {
+		resetLiveBar()
+		return
+	}
+	historyBars.value = [...historyBars.value, clamp(liveBarPeakCm.value, 0, MAX_DISTANCE_CM)]
+	resetLiveBar()
 }
 
 // ==================== 计算属性 ====================
@@ -230,6 +398,108 @@ const pageTitle = computed(() => {
 
 // ==================== 生命周期 ====================
 // 接收上一页传递的模式参数
+const historyDisplayBars = computed(() => {
+	const maxHistoryBars = liveBarVisible.value ? (MAX_VISIBLE_BARS - 1) : MAX_VISIBLE_BARS
+	return historyBars.value.slice(-maxHistoryBars)
+})
+
+const chartMetricText = computed(() => {
+	if (liveBarVisible.value) {
+		return `${liveBarPeakCm.value.toFixed(1)}cm`
+	}
+	const latestHistory = historyBars.value[historyBars.value.length - 1]
+	if (typeof latestHistory === 'number') {
+		return `${latestHistory.toFixed(1)}cm`
+	}
+	return '--'
+})
+
+const displayBars = computed(() => {
+	if (historyDisplayBars.value.length === 0) {
+		return Array.from({ length: MAX_VISIBLE_BARS }, () => createPlaceholderBar())
+	}
+	const placeholders = Array.from({
+		length: Math.max(0, MAX_VISIBLE_BARS - historyDisplayBars.value.length)
+	}, () => createPlaceholderBar())
+	return [
+		...historyDisplayBars.value.map((distanceCm) => ({
+			distanceCm,
+			placeholder: false
+		})),
+		...placeholders
+	]
+})
+
+const liveBarSlotIndex = computed(() => {
+	if (!liveBarVisible.value) {
+		return -1
+	}
+	return Math.min(historyDisplayBars.value.length, MAX_VISIBLE_BARS - 1)
+})
+
+const liveBarStyle = computed(() => {
+	const heightPercent = Number(((clamp(liveBarPeakCm.value, 0, MAX_DISTANCE_CM) / MAX_DISTANCE_CM) * 100).toFixed(2))
+	return {
+		height: `${Math.max(heightPercent, 0)}%`
+	}
+})
+
+watch(displayBars, (bars) => {
+	barChartData.value = {
+		categories: Array.from({ length: MAX_VISIBLE_BARS }, () => ''),
+		series: [
+			{
+				name: 'ropeLength',
+				data: bars.map((bar) => ({
+					value: normalizeDistanceCm(bar.distanceCm),
+					color: bar.placeholder
+						? 'rgba(0,0,0,0)'
+						: '#5B8FF9'
+				}))
+			}
+		]
+	}
+}, {
+	immediate: true
+})
+
+const barChartOpts = {
+	padding: [16, 18, 0, 8],
+	enableScroll: false,
+	animation: false,
+	dataLabel: false,
+	legend: {
+		show: false
+	},
+	xAxis: {
+		disabled: true,
+		disableGrid: true,
+		axisLine: false
+	},
+	yAxis: {
+		data: [{
+			min: 0,
+			max: CHART_AXIS_MAX
+		}],
+		splitNumber: 5,
+		gridType: 'dash',
+		dashLength: 3,
+		padding: 10
+	},
+	extra: {
+		column: {
+			type: 'group',
+			width: 16,
+			barBorderRadius: [10, 10, 0, 0]
+		},
+		tooltip: {
+			showCategory: false,
+			legendShow: false,
+			borderRadius: 8
+		}
+	}
+}
+
 onLoad((options) => {
 	if (options.modeKey) {
 		// 根据 key 找到对应的索引
@@ -245,16 +515,79 @@ onLoad((options) => {
 const handleFrame = (data) => {
 	const p = data.parsed
 	if (!p) return
+	if (
+		p.setForce !== lastDeviceSetForce ||
+		p.setForceMode !== lastDeviceSetForceMode ||
+		p.sleepState !== lastDeviceSleepState
+	) {
+		lastDeviceSetForce = p.setForce
+		lastDeviceSetForceMode = p.setForceMode
+		lastDeviceSleepState = p.sleepState
+		tracePower('device frame state changed', {
+			setForce: p.setForce,
+			setForceMode: p.setForceMode,
+			setForceModeText: p.setForceModeText,
+			sleepState: p.sleepState,
+			leftInstantForce: p.left?.instantForce,
+			rightInstantForce: p.right?.instantForce,
+			pagePowerOn: powerOn.value,
+			dialPowerOn: getDialPowerState()
+		})
+	}
+	if (
+		pendingPowerAction.value === 'opening' &&
+		p.setForceMode === pendingConfirmMode &&
+		p.setForce === pendingConfirmForce
+	) {
+		powerOn.value = true
+		tracePower('power on confirmed by frame', {
+			actionId: powerActionSeq,
+			setForce: p.setForce,
+			setForceMode: p.setForceMode,
+			setForceModeText: p.setForceModeText
+		})
+		clearPendingPowerConfirm()
+	}
+	if (
+		pendingPowerAction.value === 'closing' &&
+		p.setForceMode === FORCE_MODE.OFF
+	) {
+		powerOn.value = false
+		tracePower('power off confirmed by frame', {
+			actionId: powerActionSeq,
+			setForce: p.setForce,
+			setForceMode: p.setForceMode,
+			setForceModeText: p.setForceModeText
+		})
+		clearPendingPowerConfirm()
+		serialService.stopReading()
+	}
 	// 开机后第一帧：捕获基准值
 	if (needCaptureBaseline) {
 		countBaseline = p.sportCount
 		needCaptureBaseline = false
 	}
+	const currentSportCount = Number(p.sportCount) || 0
+	if (lastSportCount === null || currentSportCount < lastSportCount) {
+		lastSportCount = currentSportCount
+	}
+	const currentDistanceCm = Math.max(
+		toDistanceCm(p.left?.distance),
+		toDistanceCm(p.right?.distance)
+	)
+	if (currentDistanceCm >= LIVE_BAR_TRIGGER_CM) {
+		liveBarVisible.value = true
+		liveBarPeakCm.value = Math.max(liveBarPeakCm.value, currentDistanceCm)
+	}
+	if (currentSportCount > lastSportCount) {
+		finalizeLiveBar()
+		lastSportCount = currentSportCount
+	}
 	// 检测运动：任一手速度绝对值超过阈值 → 刷新活跃时间戳
 	if (Math.abs(p.left.speed) > SPEED_THRESHOLD || Math.abs(p.right.speed) > SPEED_THRESHOLD) {
 		lastActiveTs = Date.now()
 	}
-	const currentCount = p.sportCount - countBaseline
+	const currentCount = Math.max(0, currentSportCount - countBaseline)
 	statBoard.value = {
 		sets: formatSets(setCount, currentCount),
 		duration: formatTime(activeSeconds),
@@ -264,22 +597,37 @@ const handleFrame = (data) => {
 
 onMounted(() => {
 	showSafetyModal.value = true
+	tracePower('page mounted', {
+		powerOn: powerOn.value,
+		dialValue: dialValue.value,
+		selectedMode: selectedMode.value
+	})
 	// 订阅串口帧事件
 	serialService.on('frame', handleFrame)
+	serialService.on('error', handleSerialError)
 })
 
 
 
 onBeforeUnmount(() => {
-	console.log('自由训练页 - 页面卸载，清理资源')
+	tracePower('page before unmount', {
+		powerOn: powerOn.value,
+		pendingPowerAction: pendingPowerAction.value,
+		dialPowerOn: getDialPowerState(),
+		dialValue: dialValue.value
+	})
 	// 停止运动计时
 	if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
 	// 取消串口帧订阅
+	resetLiveBar()
+	lastSportCount = null
 	serialService.off('frame', handleFrame)
+	serialService.off('error', handleSerialError)
 	// 确保停止力量输出（包含任何进行中的关机序列）
-	if (powerOn.value) {
+	if (powerOn.value || pendingPowerAction.value !== null) {
 		serialService.stopForce()
 	}
+	clearPendingPowerConfirm()
 })
 
 // Android 返回键处理
@@ -300,9 +648,17 @@ const handleModalConfirm = () => {
 	// console.log('用户已确认安全须知')
 }
 
+const handleSerialError = (err) => {
+	tracePower('serial error', err)
+}
+
 // 力量旋钮值变化回调（仅 touchend 时触发）
 const onDialChange = (value) => {
-	console.log('力量值确认:', value)
+	tracePower('dial value confirmed', {
+		value,
+		pagePowerOn: powerOn.value,
+		dialPowerOn: getDialPowerState()
+	})
 	lastForce = value  // 记忆力量值
 	// 如果已开机，通知下位机更新力量
 	if (powerOn.value) {
@@ -311,45 +667,126 @@ const onDialChange = (value) => {
 }
 
 // 开关状态变化回调
-const onPowerChange = (isOn) => {
-	powerOn.value = isOn
-	console.log('开关状态:', isOn ? '开' : '关')
-	
-	if (isOn) {
-		// 如果在关机发送序列中重新开机，立即停止关机序列
-		// 开启：组数 +1，下一帧捕获次数基准（实现组内次数归零）
-		setCount++
-		needCaptureBaseline = true
-		// 启动运动计时器（1 秒窗口：窗口内有活跃帧 → +1s）
-		lastActiveTs = 0
-		activeTimer = setInterval(() => {
-			if (lastActiveTs > 0 && (Date.now() - lastActiveTs) < IDLE_WINDOW) {
-				activeSeconds++
-			}
-		}, 1000)
-		const mode = modes.value[selectedMode.value]
-		const forceMode = MODE_KEY_MAP[mode.key] || FORCE_MODE.CONST
-		serialService.startWorking(dialValue.value, forceMode, 200)  // 5Hz
-	} else {
-		// 关闭：停止运动计时 + 安全停力（持续发 OFF 确保下位机收到）
-		if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
-		serialService.stopForce()  // stopWorking + 持续发 2s OFF 帧
-		// 恢复到上次使用的力量值（PowerDial 关机会把值设为 min）
-		dialValue.value = lastForce
+function getSelectedForceMode() {
+	const mode = modes.value[selectedMode.value]
+	return MODE_KEY_MAP[mode.key] || FORCE_MODE.CONST
+}
+
+function doPowerOn() {
+	pendingPowerAction.value = 'opening'
+	pendingConfirmForce = dialValue.value
+	pendingConfirmMode = getSelectedForceMode()
+	schedulePendingPowerConfirmTimeout('opening')
+	tracePower('doPowerOn begin', {
+		actionId: powerActionSeq,
+		dialValue: dialValue.value,
+		modeIndex: selectedMode.value,
+		forceMode: pendingConfirmMode,
+		pagePowerOn: powerOn.value,
+		pendingPowerAction: pendingPowerAction.value,
+		dialPowerOn: getDialPowerState()
+	})
+	setCount++
+	needCaptureBaseline = true
+	lastSportCount = null
+	resetLiveBar()
+	lastActiveTs = 0
+
+	if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
+	activeTimer = setInterval(() => {
+		if (lastActiveTs > 0 && (Date.now() - lastActiveTs) < IDLE_WINDOW) {
+			activeSeconds++
+		}
+	}, 1000)
+
+	serialService.startWorking(pendingConfirmForce, pendingConfirmMode, 200)
+	tracePower('doPowerOn dispatched startWorking', {
+		actionId: powerActionSeq,
+		dialValue: pendingConfirmForce,
+		forceMode: pendingConfirmMode,
+		pagePowerOn: powerOn.value,
+		pendingPowerAction: pendingPowerAction.value,
+		dialPowerOn: getDialPowerState()
+	})
+}
+
+function doPowerOff() {
+	pendingPowerAction.value = 'closing'
+	pendingConfirmForce = null
+	pendingConfirmMode = FORCE_MODE.OFF
+	schedulePendingPowerConfirmTimeout('closing')
+	tracePower('doPowerOff begin', {
+		actionId: powerActionSeq,
+		dialValue: dialValue.value,
+		lastForce,
+		pagePowerOn: powerOn.value,
+		pendingPowerAction: pendingPowerAction.value,
+		dialPowerOn: getDialPowerState()
+	})
+	if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
+	lastSportCount = null
+	resetLiveBar()
+	serialService.stopForce({
+		keepPolling: true,
+		pollingDuration: POWER_CONFIRM_TIMEOUT
+	})
+	dialValue.value = lastForce
+	tracePower('doPowerOff dispatched stopForce', {
+		actionId: powerActionSeq,
+		dialValue: dialValue.value,
+		lastForce,
+		pagePowerOn: powerOn.value,
+		pendingPowerAction: pendingPowerAction.value,
+		dialPowerOn: getDialPowerState()
+	})
+}
+
+const onPowerRequest = (isOn) => {
+	powerActionSeq += 1
+	tracePower('onPowerRequest received', {
+		actionId: powerActionSeq,
+		isOn,
+		pagePowerOn: powerOn.value,
+		pendingPowerAction: pendingPowerAction.value,
+		dialPowerOn: getDialPowerState(),
+		dialValue: dialValue.value
+	})
+	if (pendingPowerAction.value !== null) {
+		tracePower('onPowerRequest ignored: confirm pending', {
+			actionId: powerActionSeq,
+			isOn,
+			pagePowerOn: powerOn.value,
+			pendingPowerAction: pendingPowerAction.value,
+			dialPowerOn: getDialPowerState()
+		})
+		return
 	}
+	if (powerOn.value === isOn) {
+		tracePower('onPowerRequest ignored: same confirmed state', {
+			actionId: powerActionSeq,
+			isOn,
+			pagePowerOn: powerOn.value,
+			dialPowerOn: getDialPowerState()
+		})
+		return
+	}
+	isOn ? doPowerOn() : doPowerOff()
 }
 
 // 模式选择（选择即确认，不依赖开关状态）
 const selectMode = (index) => {
+	if (pendingPowerAction.value !== null) return
 	if (selectedMode.value === index) return // 防止重复选择同一个
 	
 	selectedMode.value = index
 	
-	// 如果已开机，更新下位机的力量模式（下个 tick 自动生效，无顿挫）
 	if (powerOn.value) {
-		const mode = modes.value[index]
-		const forceMode = MODE_KEY_MAP[mode.key] || FORCE_MODE.CONST
-		serialService.updateWorkingForce(dialValue.value, forceMode)
+		tracePower('selectMode update while power on', {
+			index,
+			modeKey: modes.value[index]?.key,
+			dialValue: dialValue.value
+		})
+		serialService.updateWorkingForce(dialValue.value, getSelectedForceMode())
 	}
 }
 
@@ -466,9 +903,11 @@ const selectMode = (index) => {
 .force-curve-panel {
 	position: relative;
 	width: 100%;
-	height: 280rpx;
+	height: 320rpx;
 	margin-bottom: 24rpx;
 	flex-shrink: 0;
+	padding: 24rpx 24rpx 20rpx;
+	box-sizing: border-box;
 	border-radius: 24rpx;
 	border: 3rpx solid #d0d0d0;
 	box-shadow: 
@@ -478,9 +917,113 @@ const selectMode = (index) => {
 	overflow: hidden;
 }
 
-.force-curve-img {
+.force-curve-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	margin-bottom: 12rpx;
+}
+
+.force-curve-copy {
+	display: flex;
+	flex-direction: column;
+	gap: 10rpx;
+}
+
+.force-curve-title {
+	font-size: 30rpx;
+	font-weight: 600;
+	color: #1F2937;
+}
+
+.force-curve-legend {
+	display: flex;
+	align-items: center;
+	gap: 20rpx;
+}
+
+.force-curve-legend-item {
+	display: flex;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.force-curve-dot {
+	width: 14rpx;
+	height: 14rpx;
+	border-radius: 50%;
+}
+
+.force-curve-dot--history {
+	background: #5B8FF9;
+}
+
+.force-curve-dot--live {
+	background: #36CFC9;
+}
+
+.force-curve-legend-text {
+	font-size: 22rpx;
+	color: #6B7280;
+}
+
+.force-curve-metric {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4rpx;
+}
+
+.force-curve-metric-label {
+	font-size: 22rpx;
+	color: #6B7280;
+}
+
+.force-curve-metric-value {
+	font-size: 34rpx;
+	font-weight: 700;
+	color: #111827;
+}
+
+.force-curve-chart-box {
+	position: relative;
 	width: 100%;
-	height: 100%;
+	height: 220rpx;
+	border-radius: 18rpx;
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 251, 0.98));
+	overflow: hidden;
+}
+
+.force-curve-history-chart {
+	position: relative;
+	z-index: 1;
+}
+
+.force-curve-live-overlay {
+	position: absolute;
+	top: 16rpx;
+	right: 18rpx;
+	bottom: 18rpx;
+	left: 50rpx;
+	display: flex;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.force-curve-live-slot {
+	flex: 1;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+}
+
+.force-curve-live-bar {
+	width: 16rpx;
+	min-height: 2rpx;
+	border-radius: 10rpx 10rpx 0 0;
+	background: linear-gradient(180deg, #62F0E2 0%, #36CFC9 100%);
+	box-shadow: 0 6rpx 14rpx rgba(54, 207, 201, 0.22);
+	transition: height 0.16s linear;
 }
 
 /* ==================== 力量控制区：旋钮 ==================== */
