@@ -1,5 +1,11 @@
 <template>
 	<view class="container">
+		<!-- 自定义导航栏 -->
+		<view class="header">
+			<CommonBackButton class="back-btn-position" />
+			<text class="header-title">智能评估</text>
+		</view>
+		
 		<!-- 顶部广告图 -->
 		<view class="ad-banner">
 			<image 
@@ -50,6 +56,8 @@
 </template>
 
 <script setup>
+import CommonBackButton from '@/components/ui-box/common-back-button.vue'
+
 // 智能评估首页 - 三大评估入口
 
 // 跳转到身体机能评估
@@ -83,12 +91,36 @@ const goToStrengthAssess = () => {
 	overflow: hidden;
 }
 
+/* 自定义导航栏 */
+.header {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 96rpx;
+	flex-shrink: 0;
+}
+
+.back-btn-position {
+	position: absolute;
+	left: 21rpx;
+	top: 50%;
+	transform: translateY(-50%);
+}
+
+.header-title {
+	font-size: 34rpx;
+	font-weight: 700;
+	color: #333333;
+}
+
 /* 顶部广告图 */
 .ad-banner {
 	flex-shrink: 0;
-	width: 100%;
 	height: 350rpx;
 	overflow: hidden;
+	margin: 0 30rpx;
+	border-radius: 24rpx;
 }
 
 .ad-image {

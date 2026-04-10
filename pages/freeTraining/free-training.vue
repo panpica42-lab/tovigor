@@ -1,3 +1,109 @@
+<!--
+自由训练页当前“力量开关按钮”行为说明
+============================================================================
+
+一、先说结论
+1. 这个页面里的 PowerDial 开关现在不是“点一下组件自己就切换成开/关”的乐观模式。
+2. 它已经改成“受控模式”：
+   - 用户点击按钮，只代表“提出一个开机/关机请求”
+   - 页面收到请求后，去发送对应的串口命令
+   - 只有下位机回包确认后，页面里的 powerOn 真状态才会改变
+   - PowerDial 的视觉状态只跟这个 powerOn 真状态走
+3. 所以现在按钮不会在点击瞬间立刻变亮或变灰。
+   它只有在“设备确认已经开”或“设备确认已经关”之后，才会真正切换视觉状态。
+
+二、为什么要这样做
+1. 之前 PowerDial 是自管理状态组件：
+   - 一收到点击事件，就先把自己切成“开”或“关”
+   - 再通知页面去发串口命令
+2. 这种写法的风险是：
+   - UI 先说自己已经关了，但电机未必真的关了
+   - UI 先说自己已经开了，但下位机未必已经切到工作态
+3. 这会造成“视觉状态”和“设备真实状态”脱节，用户看到的开关状态不可靠。
+4. 现在这版的目标就是：按钮只显示“真状态”，不显示“点击意图”。
+
+三、现在点击“开”时到底会发生什么
+1. PowerDial 在受控模式下不会自己翻转 powerOn，而是发出 request-power-change 事件。
+2. 页面收到这个事件后，进入“等待开机确认”流程：
+   - 记录 pendingPowerAction = 'opening'
+   - 记录本次准备下发的目标力量值和目标模式
+   - 调用 serialService.startWorking(...)
+3. 在等待确认期间：
+   - PowerDial 会被禁用，防止重复点击或继续拖拽
+   - 页面不会立刻把 powerOn 设为 true
+4. 后续只要收到一帧回包，同时满足：
+   - p.setForceMode === 本次目标模式
+   - p.setForce === 本次目标力量
+   就认定“真开启成功”
+5. 只有到这一步，页面才会执行：
+   - powerOn.value = true
+   - 清除 pendingPowerAction
+   - PowerDial 才会真正显示为开启状态
+
+四、现在点击“关”时到底会发生什么
+1. PowerDial 同样只发 request-power-change 事件，不自己先变灰。
+2. 页面收到关闭请求后，进入“等待关机确认”流程：
+   - 记录 pendingPowerAction = 'closing'
+   - 调用 serialService.stopForce(...)
+3. 这里的 stopForce 不是只发 1 次 OFF，而是：
+   - 连续发送一段时间的 OFF 帧，确保下位机能收到关闭命令
+4. 与之前不同的是：
+   - 这次 stopForce 会带 keepPolling: true
+   - 也就是说，停力发送期间不会立刻停止读取
+   - 页面仍然可以继续接收下位机回包，用来确认“是否真的关掉了”
+5. 后续只要收到一帧回包满足：
+   - p.setForceMode === FORCE_MODE.OFF
+   就认定“真关闭成功”
+6. 只有到这一步，页面才会执行：
+   - powerOn.value = false
+   - 清除 pendingPowerAction
+   - 停止用于确认的读取
+   - PowerDial 才会真正显示为关闭状态
+
+五、为什么关闭时还要额外保留读取
+1. serialService.stopForce() 内部原本会先 stopWorking()
+2. stopWorking() 以前会直接停掉轮询读取
+3. 如果关闭时立刻停读，就拿不到“mode == 0”的确认回包
+4. 所以这里专门让 stopForce 在自由训练页支持：
+   - 停力发送继续执行
+   - 读取暂时保留
+   - 等收到关闭确认回包后，再主动 stopReading()
+
+六、关闭的“发送时间”和“确认等待时间”现在是分开的
+1. stopForce 的 OFF 连续发送时间默认仍然是 2 秒左右
+2. 但本页对“关闭确认”的等待窗口是 POWER_CONFIRM_TIMEOUT
+3. 当前 POWER_CONFIRM_TIMEOUT = 5000ms
+4. 这意味着：
+   - 前 2 秒主要做停力命令补发
+   - 最长 5 秒内都允许继续等关闭确认回包
+5. 这样做是为了避免把 OFF 命令硬发 5 秒，但仍然给下位机足够的回包确认时间
+
+七、如果 5 秒内一直收不到确认回包怎么办
+1. 当前实现不会无限卡住
+2. 页面会触发“确认超时”逻辑：
+   - opening 超时：调用 serialService.stopWorking()
+   - closing 超时：调用 serialService.stopReading()
+   - 然后清掉 pendingPowerAction，重新允许用户操作
+3. 也就是说：
+   - 不会因为一次确认失败就把旋钮永久锁死
+   - 但在超时之前，按钮会维持“尚未确认”的真状态显示
+
+八、这套逻辑的核心原则
+1. 点击按钮不是状态真相，回包确认才是状态真相
+2. PowerDial 只负责展示真状态，不负责自己拍板“我已经开了/关了”
+3. 页面 powerOn 是唯一可信状态源
+4. UI 可以慢几十到几百毫秒，但不能假装已经切换成功
+
+九、后续排查这段逻辑时，建议优先看这些关键词日志
+1. request-power-change
+2. onPowerRequest received
+3. doPowerOn begin / doPowerOff begin
+4. power on confirmed by frame
+5. power off confirmed by frame
+6. power confirm timeout
+
+============================================================================
+-->
 <template>
 	<view class="container" @touchmove.prevent>
 		<!-- 自定义导航栏 -->
@@ -227,7 +333,7 @@ function schedulePendingPowerConfirmTimeout(action) {
 			dialPowerOn: getDialPowerState()
 		})
 		if (action === 'opening') {
-			serialService.stopWorking()
+			serialService.stopForce()
 		}
 		if (action === 'closing') {
 			serialService.stopReading()

@@ -136,7 +136,8 @@
 		{
 			"path": "pages/smartAssess/first-skip",
 			"style": {
-				"navigationBarTitleText": "智能评估",
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
 				"disableScroll": true,
 				"bounce": "none"
 			}

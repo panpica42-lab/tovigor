@@ -17,6 +17,7 @@ Register new routes in `pages.json` and keep feature-specific components close t
 - Main target platform is Android App.
 - H5 should be treated as a preview/debug surface, not the source of truth for hardware behavior.
 - Do not treat `npm` scripts as the standard workflow for this repository.
+- Do not proactively use `node`, `npm`, or Node-based tooling unless the user explicitly asks for it or the current task clearly depends on it.
 
 ## Coding Style & Naming Conventions
 Follow the existing style: tab indentation in `.js`, `.vue`, and JSON-like config files. Use single quotes in JavaScript unless the file already differs. Prefer `camelCase` for variables and functions, `PascalCase` for globally registered components, and kebab-case file names for page and component `.vue` files such as `free-training-intro.vue`.

@@ -46,7 +46,7 @@ tovigor_v1/
 │  Vue 页面层 (skip1.vue, free-training.vue ...)              │
 │  - UI 交互                                                  │
 │  - 订阅事件: on('frame', handleFrame)                       │
-│  - 控制工作状态: startWorking() / stopWorking()             │
+│  - 控制工作状态: startWorking() / stopForce()             │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -79,7 +79,7 @@ tovigor_v1/
 
 ```javascript
 // ✅ 正确的页面代码
-import { on, off, startWorking, stopWorking, getStatus } from '@/utils/serialService.js'
+import { on, off, startWorking, stopForce, getStatus } from '@/utils/serialService.js'
 
 onMounted(() => {
   // 1. 订阅帧事件
@@ -99,7 +99,7 @@ const handleStart = () => {
 
 onBeforeUnmount(() => {
   off('frame', handleFrame)
-  stopWorking()  // 停止发送和轮询，但不断开连接
+  stopForce()  // 安全停力，但不断开连接
 })
 ```
 
@@ -112,7 +112,7 @@ onBeforeUnmount(() => {
 | `on(event, callback)` | 订阅事件：'frame', 'raw', 'connect', 'disconnect', 'error' |
 | `off(event, callback)` | 取消订阅 |
 | `startWorking(force, mode, interval)` | 启动工作状态（周期发送 + 轮询） |
-| `stopWorking()` | 停止工作状态（不断开连接） |
+| `stopForce(options)` | 安全停力序列（持续发 OFF 帧，不断开连接） |
 | `updateWorkingForce(force, mode)` | 动态更新力量值 |
 | `getStatus()` | 获取连接状态 `{ isConnected, portId, config }` |
 | `send(hexData)` | 发送原始数据 |

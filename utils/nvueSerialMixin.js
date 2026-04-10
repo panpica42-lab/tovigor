@@ -16,12 +16,12 @@
  *     },
  *     beforeDestroy() {
  *       this.$serial.off('frame', this.handleFrame)
- *       this.$serial.stopWorking()
+ *       this.$serial.stopForce()
  *     }
  *   }
  * 
  * 提供：
- *   this.$serial       - serialService 实例（on/off/startWorking/stopWorking/sendOnce 等）
+ *   this.$serial       - serialService 实例（on/off/startWorking/stopForce/sendOnce 等）
  *   this.$FORCE_MODE    - 力量模式枚举常量
  *   this.serialReady    - 响应式布尔值，串口是否已连接就绪
  */

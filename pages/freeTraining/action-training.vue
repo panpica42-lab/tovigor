@@ -261,12 +261,6 @@ let activeSeconds = 0
 let lastActiveTs = 0
 let activeTimer = null
 
-// 关机发送序列
-const SHUTDOWN_DURATION = 2000
-const SHUTDOWN_INTERVAL = 200
-let shutdownTimer = null
-let shutdownTimeout = null
-
 // ==================== 辅助函数 ====================
 
 function formatTime(totalSeconds) {
@@ -278,11 +272,6 @@ function formatTime(totalSeconds) {
 
 function formatSets(sets, count) {
 	return `${String(sets).padStart(2, '0')}/${String(count).padStart(2, '0')}`
-}
-
-function stopShutdownSequence() {
-	if (shutdownTimer) { clearInterval(shutdownTimer); shutdownTimer = null }
-	if (shutdownTimeout) { clearTimeout(shutdownTimeout); shutdownTimeout = null }
 }
 
 function clamp(value, min, max) {
@@ -353,11 +342,9 @@ onMounted(() => {
 onBeforeUnmount(() => {
 	console.log('动作训练页 - 页面卸载，清理资源')
 	if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
-	stopShutdownSequence()
 	serialService.off('frame', handleFrame)
 	if (powerOn.value) {
-		serialService.stopWorking()
-		serialService.sendOnce(5, FORCE_MODE.OFF)
+		serialService.stopForce()
 	}
 })
 
@@ -416,7 +403,6 @@ const onPowerChange = (isOn) => {
 	console.log('开关状态:', isOn ? '开' : '关')
 
 	if (isOn) {
-		stopShutdownSequence()
 		setCount++
 		needCaptureBaseline = true
 
@@ -430,16 +416,7 @@ const onPowerChange = (isOn) => {
 		serialService.startWorking(dialValue.value, currentForceMode, 200)
 	} else {
 		if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
-		serialService.stopWorking()
-
-		serialService.sendOnce(5, FORCE_MODE.OFF)
-		shutdownTimer = setInterval(() => {
-			serialService.sendOnce(5, FORCE_MODE.OFF)
-		}, SHUTDOWN_INTERVAL)
-		shutdownTimeout = setTimeout(() => {
-			stopShutdownSequence()
-			console.log('关机发送序列结束')
-		}, SHUTDOWN_DURATION)
+		serialService.stopForce()
 
 		dialValue.value = lastForce
 	}

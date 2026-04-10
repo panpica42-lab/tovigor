@@ -18,17 +18,28 @@
 				v-for="(item, index) in actionList" 
 				:key="item.id"
 				class="card-wrapper"
-				@longpress="startDrag(index)"
-				@touchmove.stop.prevent="onTouchMove"
-				@touchend="endDrag"
 			>
-				<SelectedActionCard
-					:action="item"
-					:index="index"
-					:is-dragging="draggingIndex === index"
-					@update:sets="(val) => item.sets = val"
-					@update:reps="(val) => item.reps = val"
-				/>
+				<view class="delete-action" @click.stop="deleteAction(index)">
+					<text class="delete-action-text">删除</text>
+				</view>
+				<view
+					ref="swipeContentRefs"
+					class="swipe-content"
+					:style="getSwipeContentStyle(index)"
+					@longpress="startDrag(index, $event)"
+					@touchstart="onTouchStart(index, $event)"
+					@touchmove="onTouchMove(index, $event)"
+					@touchend="onTouchEnd(index)"
+					@touchcancel="onTouchEnd(index)"
+				>
+					<SelectedActionCard
+						:action="item"
+						:index="index"
+						:is-dragging="draggingIndex === index"
+						@update:sets="(val) => item.sets = val"
+						@update:reps="(val) => item.reps = val"
+					/>
+				</view>
 			</view>
 		</scroll-view>
 
@@ -58,6 +69,8 @@
 				</view>
 			</view>
 		</ModalBase>
+
+		<CustomToast ref="toastRef" />
 	</view>
 </template>
 
@@ -65,19 +78,48 @@
 import { ref, getCurrentInstance } from 'vue'
 import { onLoad, onBackPress } from '@dcloudio/uni-app'
 import ModalBase from '@/components/modals/modal-base.vue'
+import CustomToast from '@/components/modals/custom-toast.vue'
 import SelectedActionCard from './components/selected-action-card.vue'
 
 // ========== 常量 ==========
 const FALLBACK_SETS = 1
 const FALLBACK_REPS = 12
+const DELETE_ACTION_WIDTH = uni.upx2px(160)
+const SWIPE_DIRECTION_THRESHOLD = 12
+const SWIPE_OPEN_THRESHOLD = DELETE_ACTION_WIDTH / 2
+const DRAG_REORDER_THRESHOLD = 80
 
 // ========== 状态 ==========
 const actionList = ref([])
 const showBackModal = ref(false)
+const toastRef = ref(null)
 
 // 拖拽状态
 const draggingIndex = ref(-1)
 const startY = ref(0)
+
+// 左滑删除状态（仅 openIndex / deletingIndex 需要响应式驱动模板）
+const deletingIndex = ref(-1)
+const swipeOpenIndex = ref(-1)
+
+// 以下为高频触摸变量，不走 Vue 响应式，避免每帧触发 v-for 重渲染
+let swipeMovingIndex = -1
+let swipeOffsetX = 0
+let touchStartX = 0
+let touchStartY = 0
+let touchStartOffsetX = 0
+let gestureMode = ''
+
+// swipe-content DOM 节点集合（v-for 模板 ref）
+const swipeContentRefs = ref([])
+
+// 通过 index 获取 swipe-content 真实 DOM 节点
+const getSwipeEl = (index) => {
+	const refItem = swipeContentRefs.value[index]
+	if (!refItem) return null
+	// uni-app 中 ref 可能是组件实例或 DOM 节点
+	return refItem.$el || refItem
+}
 
 // ========== 生命周期 ==========
 onLoad(() => {
@@ -104,6 +146,11 @@ onBackPress((options) => {
 	if (options.from === 'navigateBack') {
 		return false
 	}
+	// 优先关闭已展开的删除操作
+	if (swipeOpenIndex.value !== -1) {
+		closeOpenedSwipe()
+		return true
+	}
 	// 弹窗已显示，关闭弹窗
 	if (showBackModal.value) {
 		showBackModal.value = false
@@ -115,15 +162,20 @@ onBackPress((options) => {
 })
 
 // ========== 拖拽排序 ==========
-const startDrag = (index) => {
+const startDrag = (index, e) => {
+	closeSwipeState()
 	draggingIndex.value = index
+	gestureMode = 'drag'
+	const touch = getTouchPoint(e)
+	startY.value = touch ? touch.clientY : 0
 	uni.vibrateShort()
 }
 
-const onTouchMove = (e) => {
+const handleDragMove = (e) => {
 	if (draggingIndex.value === -1) return
 	
-	const touch = e.touches[0]
+	const touch = getTouchPoint(e)
+	if (!touch) return
 	const currentY = touch.clientY
 	
 	if (startY.value === 0) {
@@ -132,9 +184,8 @@ const onTouchMove = (e) => {
 	}
 	
 	const deltaY = currentY - startY.value
-	const threshold = 80
 	
-	if (Math.abs(deltaY) > threshold) {
+	if (Math.abs(deltaY) > DRAG_REORDER_THRESHOLD) {
 		const direction = deltaY > 0 ? 1 : -1
 		const newIndex = draggingIndex.value + direction
 		
@@ -153,6 +204,174 @@ const onTouchMove = (e) => {
 const endDrag = () => {
 	draggingIndex.value = -1
 	startY.value = 0
+	resetTouchState()
+}
+
+// ========== 左滑删除 ==========
+const getTouchPoint = (e) => {
+	return e?.touches?.[0] || e?.changedTouches?.[0] || null
+}
+
+const closeOpenedSwipe = () => {
+	swipeOpenIndex.value = -1
+}
+
+const closeSwipeState = () => {
+	closeOpenedSwipe()
+	swipeMovingIndex = -1
+	swipeOffsetX = 0
+	touchStartOffsetX = 0
+}
+
+const resetTouchState = () => {
+	swipeMovingIndex = -1
+	swipeOffsetX = 0
+	touchStartX = 0
+	touchStartY = 0
+	touchStartOffsetX = 0
+	gestureMode = ''
+}
+
+const onTouchStart = (index, e) => {
+	if (draggingIndex.value !== -1) return
+
+	const touch = getTouchPoint(e)
+	if (!touch) return
+
+	if (swipeOpenIndex.value !== -1 && swipeOpenIndex.value !== index) {
+		closeOpenedSwipe()
+	}
+
+	touchStartX = touch.clientX
+	touchStartY = touch.clientY
+	touchStartOffsetX = swipeOpenIndex.value === index ? -DELETE_ACTION_WIDTH : 0
+	swipeOffsetX = touchStartOffsetX
+	swipeMovingIndex = -1
+	gestureMode = ''
+}
+
+const onTouchMove = (index, e) => {
+	if (draggingIndex.value === index) {
+		handleDragMove(e)
+		return
+	}
+
+	if (draggingIndex.value !== -1) return
+
+	const touch = getTouchPoint(e)
+	if (!touch) return
+
+	const deltaX = touch.clientX - touchStartX
+	const deltaY = touch.clientY - touchStartY
+
+	if (!gestureMode) {
+		if (
+			Math.abs(deltaX) < SWIPE_DIRECTION_THRESHOLD &&
+			Math.abs(deltaY) < SWIPE_DIRECTION_THRESHOLD
+		) {
+			return
+		}
+
+		if (Math.abs(deltaX) > Math.abs(deltaY)) {
+			gestureMode = 'swipe'
+			swipeMovingIndex = index
+			// 关闭 CSS transition，让跟手时没有延迟
+			const el = getSwipeEl(index)
+			if (el) el.style.transition = 'none'
+		} else {
+			gestureMode = 'scroll'
+			return
+		}
+	}
+
+	if (gestureMode !== 'swipe') return
+
+	// 水平滑动时阻止事件冒泡，避免触发 scroll-view 滚动
+	e.stopPropagation && e.stopPropagation()
+
+	let nextOffset = touchStartOffsetX + deltaX
+
+	if (nextOffset > 0) {
+		nextOffset = 0
+	}
+
+	if (nextOffset < -DELETE_ACTION_WIDTH) {
+		nextOffset = -DELETE_ACTION_WIDTH
+	}
+
+	swipeOffsetX = nextOffset
+
+	// 直接操作 DOM，完全绕过 Vue 响应式
+	const el = getSwipeEl(index)
+	if (el) {
+		el.style.transform = `translate3d(${nextOffset}px, 0, 0)`
+	}
+}
+
+const onTouchEnd = (index) => {
+	if (draggingIndex.value === index) {
+		endDrag()
+		return
+	}
+
+	if (gestureMode === 'swipe' && swipeMovingIndex === index) {
+		const shouldOpen = Math.abs(swipeOffsetX) >= SWIPE_OPEN_THRESHOLD
+
+		// 恢复 CSS transition，让回弹/吸附有动画
+		const el = getSwipeEl(index)
+		if (el) {
+			el.style.transition = 'transform 0.2s ease'
+			el.style.transform = shouldOpen
+				? `translate3d(${-DELETE_ACTION_WIDTH}px, 0, 0)`
+				: 'translate3d(0, 0, 0)'
+		}
+
+		// 同步最终状态到 Vue ref（仅此一次触发响应式）
+		swipeOpenIndex.value = shouldOpen ? index : -1
+	}
+
+	resetTouchState()
+}
+
+const getSwipeContentStyle = (index) => {
+	// 删除动画：整张卡片滑出屏幕
+	if (deletingIndex.value === index) {
+		return {
+			transform: 'translate3d(-100%, 0, 0)',
+			transition: 'transform 0.25s ease-in'
+		}
+	}
+
+	// 已展开的卡片保持展开位置
+	if (swipeOpenIndex.value === index) {
+		return {
+			transform: `translate3d(${-DELETE_ACTION_WIDTH}px, 0, 0)`,
+			transition: 'transform 0.2s ease'
+		}
+	}
+
+	// 其他卡片：静态原位（不依赖任何高频变量）
+	return {
+		transform: 'translate3d(0, 0, 0)',
+		transition: 'transform 0.2s ease'
+	}
+}
+
+const deleteAction = (index) => {
+	if (!actionList.value[index]) return
+	if (deletingIndex.value !== -1) return // 防止连续点击
+
+	// 先播放滑出动画
+	deletingIndex.value = index
+	closeSwipeState()
+
+	// 动画结束后再移除数据
+	setTimeout(() => {
+		actionList.value.splice(index, 1)
+		deletingIndex.value = -1
+		resetTouchState()
+		toastRef.value?.show('动作已删除')
+	}, 250)
 }
 
 // ========== 事件处理 ==========
@@ -225,7 +444,36 @@ const startTraining = () => {
 }
 
 .card-wrapper {
+	position: relative;
 	margin-bottom: 20rpx;
+	border-radius: 24rpx;
+	overflow: hidden;
+}
+
+.delete-action {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	width: 160rpx;
+	background-color: #FF4D4F;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.delete-action-text {
+	font-size: 30rpx;
+	font-weight: 600;
+	color: #ffffff;
+}
+
+.swipe-content {
+	position: relative;
+	z-index: 1;
+	will-change: transform;
+	backface-visibility: hidden;
+	touch-action: pan-y;
 }
 
 /* ========== 底部按钮 ========== */

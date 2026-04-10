@@ -107,7 +107,7 @@
 <script setup>
 import { ref, shallowRef, triggerRef, onMounted, onUnmounted, computed } from 'vue'
 import { onBackPress } from '@dcloudio/uni-app'
-import { on, off, startWorking, stopWorking, sendOnce, getStatus, FORCE_MODE } from '@/utils/serialService.js'
+import { on, off, startWorking, stopForce, FORCE_MODE } from '@/utils/serialService.js'
 
 // ==================== 配置常量 ====================
 const DEBUG_PANEL = true  // 调试面板开关，发布时改为 false
@@ -267,8 +267,7 @@ const stopGame = () => {
 	
 	// 串口模式：关闭力量 + 停止工作状态
 	if (inputMode.value === 'serial') {
-		sendOnce(5, FORCE_MODE.OFF)  // 模式0 + 力量5 = 正常关闭（非紧急停车）
-		stopWorking()
+		stopForce()
 		console.log('[FlappyBird] 力量已关闭，串口工作状态已停止')
 	}
 }

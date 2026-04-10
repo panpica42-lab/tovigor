@@ -31,22 +31,59 @@ import {
 } from '@/uni_modules/wzl-serialbridge'
 
 // ============================================================================
-// 单例状态
+// 运行时状态
 // ============================================================================
 
-let portId = 0
-let isConnected = false
-let readTimer = null
-let uiRefreshTimer = null
-let rxBuffer = ''  // 接收缓冲区，用于帧拼接
-
-// 连接配置（记录当前连接参数，便于重连）
-let currentConfig = {
+const DEFAULT_CONFIG = {
   path: '/dev/ttyS3',
   baudRate: 115200,
   dataBits: 8,
   stopBits: 1,
   parity: 'none'
+}
+
+const SERVICE_STATE = {
+  DISCONNECTED: 'disconnected',
+  CONNECTING: 'connecting',
+  IDLE: 'idle',
+  WORKING: 'working',
+  SHUTTING_DOWN: 'shuttingDown',
+  DISCONNECTING: 'disconnecting'
+}
+
+const runtime = {
+  state: SERVICE_STATE.DISCONNECTED,
+  portId: 0,
+  currentConfig: { ...DEFAULT_CONFIG },
+  activeSessionId: 0,
+  connectAttemptId: 0,
+  connectPromise: null,
+  disconnectAttemptId: 0,
+  disconnectPromise: null,
+  rxBuffer: '',
+  read: {
+    running: false,
+    timer: null,
+    loopId: 0,
+    inFlight: false,
+    manualLocks: 0
+  },
+  sendChain: Promise.resolve(),
+  commandEpoch: 0,
+  working: {
+    timer: null,
+    force: 0,
+    mode: 0,
+    epoch: 0,
+    interval: 200
+  },
+  shutdown: {
+    epoch: 0,
+    timer: null,
+    timeout: null,
+    pollingTimeout: null,
+    keepPolling: false
+  }
 }
 
 // 事件监听器
@@ -92,6 +129,277 @@ const FORCE_MODE = {
 const READ_INTERVAL = 100     // 轮询间隔(ms) - 10Hz，配合 5Hz 发包绑绑有余
 const READ_TIMEOUT = 30       // 读取超时(ms)
 const READ_LENGTH = 96        // 单次读取字节数
+
+// rxBuffer 溢出保护 --------------------------------------------------------
+// 正常工作态下缓冲区只会积攒 1~2 帧（192~384 hex chars），
+// 超过此阈值说明帧同步已经失败或收到大量脏数据。
+const RX_BUFFER_MAX_HEX_LENGTH = 2048          // 触发裁剪的阈值：1024 字节
+// 裁剪时保留尾部这么多字符，避免正在拼接的有效帧被一刀切掉。
+// 2 帧窗口 = 192×2 = 384 hex chars = 192 字节，足以容纳 1 帧 + 余量。
+const RX_BUFFER_OVERFLOW_KEEP_HEX_LENGTH = A9_FRAME_HEX_LENGTH * 2
+
+function cloneConfig(config) {
+  return { ...config }
+}
+
+function mergeConfig(options = {}) {
+  return {
+    path: options.path ?? runtime.currentConfig.path,
+    baudRate: options.baudRate ?? runtime.currentConfig.baudRate,
+    dataBits: options.dataBits ?? runtime.currentConfig.dataBits,
+    stopBits: options.stopBits ?? runtime.currentConfig.stopBits,
+    parity: options.parity ?? runtime.currentConfig.parity
+  }
+}
+
+function setRuntimeState(nextState) {
+  if (runtime.state !== nextState) {
+    console.log(`[serialService] state: ${runtime.state} -> ${nextState}`)
+    runtime.state = nextState
+  }
+}
+
+function createCanceledError(errMsg = 'operation superseded') {
+  return { errCode: 10008, errMsg }
+}
+
+function createNotConnectedError() {
+  return { errCode: 10005, errMsg: '串口未连接' }
+}
+
+function hasOpenPort() {
+  return runtime.portId > 0 && (
+    runtime.state === SERVICE_STATE.IDLE ||
+    runtime.state === SERVICE_STATE.WORKING ||
+    runtime.state === SERVICE_STATE.SHUTTING_DOWN
+  )
+}
+
+function nextCommandEpoch() {
+  runtime.commandEpoch += 1
+  return runtime.commandEpoch
+}
+
+function clearWorkingTimer() {
+  if (runtime.working.timer) {
+    clearInterval(runtime.working.timer)
+    runtime.working.timer = null
+    console.log('[serialService] 发送定时器已停止')
+  }
+  runtime.working.epoch = 0
+  if (runtime.state === SERVICE_STATE.WORKING) {
+    setRuntimeState(SERVICE_STATE.IDLE)
+  }
+}
+
+function clearShutdownTimers() {
+  if (runtime.shutdown.timer) {
+    clearInterval(runtime.shutdown.timer)
+    runtime.shutdown.timer = null
+  }
+  if (runtime.shutdown.timeout) {
+    clearTimeout(runtime.shutdown.timeout)
+    runtime.shutdown.timeout = null
+  }
+  if (runtime.shutdown.pollingTimeout) {
+    clearTimeout(runtime.shutdown.pollingTimeout)
+    runtime.shutdown.pollingTimeout = null
+  }
+}
+
+function shouldPoll() {
+  return runtime.read.manualLocks > 0 || (
+    runtime.state === SERVICE_STATE.SHUTTING_DOWN && runtime.shutdown.keepPolling
+  ) || runtime.state === SERVICE_STATE.WORKING
+}
+
+function stopPollingInternal({ clearBuffer = true, log = true } = {}) {
+  if (runtime.read.timer) {
+    clearTimeout(runtime.read.timer)
+    runtime.read.timer = null
+  }
+  const wasRunning = runtime.read.running || runtime.read.inFlight
+  runtime.read.running = false
+  runtime.read.inFlight = false
+  runtime.read.loopId += 1
+  if (clearBuffer) {
+    runtime.rxBuffer = ''
+  }
+  if (wasRunning && log) {
+    console.log('[serialService] 轮询已停止')
+  }
+}
+
+function scheduleRead(loopId, delay = READ_INTERVAL) {
+  if (!runtime.read.running || loopId !== runtime.read.loopId) {
+    return
+  }
+  if (runtime.read.timer) {
+    clearTimeout(runtime.read.timer)
+  }
+  runtime.read.timer = setTimeout(() => {
+    runtime.read.timer = null
+    performRead(loopId)
+  }, delay)
+}
+
+/**
+ * rxBuffer 溢出安全阀
+ *
+ * 策略：丢弃头部、保留尾部窗口。
+ * - 尾部更可能包含正在拼接中的有效帧
+ * - 头部如果长时间未成帧，说明已经是不可恢复的脏数据
+ * - 截断点强制对齐到偶数位，保持 HEX 字节边界
+ */
+function trimRxBufferOnOverflow() {
+  if (runtime.rxBuffer.length <= RX_BUFFER_MAX_HEX_LENGTH) {
+    return
+  }
+
+  const beforeLength = runtime.rxBuffer.length
+  let keepStart = Math.max(0, beforeLength - RX_BUFFER_OVERFLOW_KEEP_HEX_LENGTH)
+
+  // 截断点必须落在字节边界（偶数位），否则保留下来的缓冲区本身就失去对齐。
+  if (keepStart % 2 !== 0) {
+    keepStart += 1
+  }
+
+  runtime.rxBuffer = runtime.rxBuffer.substring(keepStart)
+
+  console.warn(
+    '[serialService] rxBuffer overflow:',
+    beforeLength,
+    'chars, dropped:',
+    keepStart,
+    'chars, kept:',
+    runtime.rxBuffer.length,
+    'chars'
+  )
+}
+
+function performRead(loopId) {
+  if (!runtime.read.running || loopId !== runtime.read.loopId) {
+    return
+  }
+
+  if (!hasOpenPort()) {
+    stopPollingInternal()
+    return
+  }
+
+  if (runtime.read.inFlight) {
+    scheduleRead(loopId)
+    return
+  }
+
+  const sessionId = runtime.activeSessionId
+  const currentPortId = runtime.portId
+  runtime.read.inFlight = true
+
+  readSerial({
+    portId: currentPortId,
+    length: READ_LENGTH,
+    format: 'hex',
+    timeout: READ_TIMEOUT,
+    success: (res) => {
+      if (loopId !== runtime.read.loopId || sessionId !== runtime.activeSessionId) {
+        return
+      }
+
+      runtime.read.inFlight = false
+
+      if (res.bytesRead > 0) {
+        emit('raw', {
+          data: res.data,
+          bytes: res.bytesRead,
+          ts: Date.now()
+        })
+
+        handleReceivedData(res.data)
+      }
+
+      if (runtime.read.running) {
+        scheduleRead(loopId)
+      }
+    },
+    fail: (err) => {
+      if (loopId !== runtime.read.loopId || sessionId !== runtime.activeSessionId) {
+        return
+      }
+
+      runtime.read.inFlight = false
+
+      if (err.errCode !== 10003) {
+        console.error('[serialService] 读取失败:', err)
+        emit('error', { type: 'read', ...err })
+      }
+
+      if (runtime.read.running) {
+        scheduleRead(loopId)
+      }
+    }
+  })
+}
+
+function syncPolling() {
+  const shouldRun = hasOpenPort() && shouldPoll()
+
+  if (!shouldRun) {
+    stopPollingInternal()
+    return
+  }
+
+  if (runtime.read.running) {
+    return
+  }
+
+  runtime.read.running = true
+  runtime.read.inFlight = false
+  runtime.read.loopId += 1
+
+  console.log('[serialService] 启动轮询, 间隔:', READ_INTERVAL, 'ms')
+  scheduleRead(runtime.read.loopId, 0)
+}
+
+function enqueueWrite(task) {
+  const run = runtime.sendChain.then(task, task)
+  runtime.sendChain = run.catch(() => {})
+  return run
+}
+
+function closePortSilently(targetPortId) {
+  if (!targetPortId) {
+    return
+  }
+  closeSerial({
+    portId: targetPortId,
+    success: () => {},
+    fail: (err) => {
+      console.warn('[serialService] stale port close failed:', err)
+    }
+  })
+}
+
+function endShutdownState() {
+  clearShutdownTimers()
+  runtime.shutdown.epoch = 0
+  runtime.shutdown.keepPolling = false
+  if (runtime.state === SERVICE_STATE.SHUTTING_DOWN) {
+    setRuntimeState(SERVICE_STATE.IDLE)
+  }
+  syncPolling()
+}
+
+function _cancelShutdownSequence() {
+  const wasShuttingDown = runtime.state === SERVICE_STATE.SHUTTING_DOWN
+  clearShutdownTimers()
+  runtime.shutdown.epoch = 0
+  runtime.shutdown.keepPolling = false
+  if (wasShuttingDown) {
+    setRuntimeState(SERVICE_STATE.IDLE)
+  }
+  syncPolling()
+}
 
 // ============================================================================
 // CRC 工具函数（移植自 PacketCrc.java）
@@ -229,7 +537,9 @@ function verifyCrc(pkt, crcOffset) {
  */
 export function on(event, callback) {
   if (listeners[event] && typeof callback === 'function') {
-    listeners[event].push(callback)
+    if (!listeners[event].includes(callback)) {
+      listeners[event].push(callback)
+    }
   }
 }
 
@@ -252,7 +562,7 @@ export function off(event, callback) {
  */
 function emit(event, data) {
   if (listeners[event]) {
-    listeners[event].forEach(cb => {
+    ;[...listeners[event]].forEach(cb => {
       try {
         cb(data)
       } catch (e) {
@@ -277,57 +587,81 @@ function emit(event, data) {
  * @returns {Promise}
  */
 export function connect(options = {}) {
-  return new Promise((resolve, reject) => {
-    // 合并配置
-    currentConfig = {
-      path: options.path || currentConfig.path,
-      baudRate: options.baudRate || currentConfig.baudRate,
-      dataBits: options.dataBits || currentConfig.dataBits,
-      stopBits: options.stopBits || currentConfig.stopBits,
-      parity: options.parity || currentConfig.parity
-    }
+  const nextConfig = mergeConfig(options)
 
-    // 已连接则直接返回
-    if (isConnected && portId > 0) {
-      console.log('[serialService] 已连接，复用现有连接')
-      resolve({ portId, message: '已连接' })
-      return
-    }
+  if (hasOpenPort()) {
+    console.log('[serialService] 已连接，复用现有连接')
+    return Promise.resolve({ portId: runtime.portId, message: '已连接' })
+  }
 
-    console.log('[serialService] 正在连接...', currentConfig)
+  if (runtime.connectPromise) {
+    return runtime.connectPromise
+  }
 
+  if (runtime.disconnectPromise) {
+    return runtime.disconnectPromise.then(() => connect(nextConfig))
+  }
+
+  const attemptId = ++runtime.connectAttemptId
+  const connectConfig = cloneConfig(nextConfig)
+  setRuntimeState(SERVICE_STATE.CONNECTING)
+
+  console.log('[serialService] 正在连接...', connectConfig)
+
+  const promise = new Promise((resolve, reject) => {
     openSerial({
-      path: currentConfig.path,
+      path: connectConfig.path,
       config: {
-        baudRate: currentConfig.baudRate,
-        dataBits: currentConfig.dataBits,
-        stopBits: currentConfig.stopBits,
-        parity: currentConfig.parity
+        baudRate: connectConfig.baudRate,
+        dataBits: connectConfig.dataBits,
+        stopBits: connectConfig.stopBits,
+        parity: connectConfig.parity
       },
       success: (res) => {
-        portId = res.portId
-        isConnected = true
-        rxBuffer = ''  // 清空缓冲区
-        
-        console.log('[serialService] 连接成功, portId:', portId)
-        
-        // 注意：不在连接时自动启动轮询
-        // 轮询由业务层通过 startWorking() 控制
-        
-        emit('connect', { 
-          portId, 
-          path: currentConfig.path,
-          config: currentConfig 
+        if (attemptId !== runtime.connectAttemptId || runtime.state !== SERVICE_STATE.CONNECTING) {
+          closePortSilently(res.portId)
+          reject(createCanceledError('connect superseded'))
+          return
+        }
+
+        runtime.currentConfig = cloneConfig(connectConfig)
+        runtime.portId = res.portId
+        runtime.activeSessionId += 1
+        runtime.rxBuffer = ''
+
+        setRuntimeState(SERVICE_STATE.IDLE)
+
+        console.log('[serialService] 连接成功, portId:', runtime.portId)
+
+        emit('connect', {
+          portId: runtime.portId,
+          path: connectConfig.path,
+          config: cloneConfig(connectConfig)
         })
-        
+
+        syncPolling()
         resolve(res)
       },
       fail: (err) => {
+        if (attemptId !== runtime.connectAttemptId) {
+          reject(createCanceledError('connect superseded'))
+          return
+        }
+
+        setRuntimeState(SERVICE_STATE.DISCONNECTED)
         console.error('[serialService] 连接失败:', err)
         emit('error', { type: 'connect', ...err })
         reject(err)
       }
     })
+  })
+
+  runtime.connectPromise = promise
+
+  return promise.finally(() => {
+    if (runtime.connectPromise === promise) {
+      runtime.connectPromise = null
+    }
   })
 }
 
@@ -336,44 +670,132 @@ export function connect(options = {}) {
  * @returns {Promise}
  */
 export function disconnect() {
-  return new Promise((resolve, reject) => {
-    if (!isConnected || portId === 0) {
-      console.log('[serialService] 未连接，无需断开')
-      resolve({ message: '未连接' })
-      return
-    }
+  if (runtime.disconnectPromise) {
+    return runtime.disconnectPromise
+  }
 
-    console.log('[serialService] 正在断开连接...')
-    
-    // 先停止轮询
+  if (runtime.state === SERVICE_STATE.CONNECTING) {
+    runtime.connectAttemptId += 1
+    runtime.activeSessionId += 1
+    clearWorkingTimer()
     _cancelShutdownSequence()
-    stopWorking()
+    runtime.read.manualLocks = 0
+    stopPollingInternal()
+    runtime.portId = 0
+    setRuntimeState(SERVICE_STATE.DISCONNECTED)
+    console.log('[serialService] 连接中断已取消')
+    return Promise.resolve({ message: '连接已取消' })
+  }
 
+  if (!hasOpenPort()) {
+    console.log('[serialService] 未连接，无需断开')
+    return Promise.resolve({ message: '未连接' })
+  }
+
+  console.log('[serialService] 正在断开连接...')
+
+  const closingPortId = runtime.portId
+  const attemptId = ++runtime.disconnectAttemptId
+
+  clearWorkingTimer()
+  _cancelShutdownSequence()
+  runtime.read.manualLocks = 0
+  stopPollingInternal()
+
+  runtime.activeSessionId += 1
+  runtime.portId = 0
+  setRuntimeState(SERVICE_STATE.DISCONNECTING)
+
+  const promise = new Promise((resolve, reject) => {
     closeSerial({
-      portId,
+      portId: closingPortId,
       success: (res) => {
-        const oldPortId = portId
-        isConnected = false
-        portId = 0
-        rxBuffer = ''
-        
+        if (attemptId !== runtime.disconnectAttemptId) {
+          resolve({ skipped: true, stale: true })
+          return
+        }
+
+        runtime.rxBuffer = ''
+        setRuntimeState(SERVICE_STATE.DISCONNECTED)
+
         console.log('[serialService] 已断开连接')
-        
-        emit('disconnect', { portId: oldPortId })
+        emit('disconnect', { portId: closingPortId })
         resolve(res)
       },
       fail: (err) => {
+        if (attemptId !== runtime.disconnectAttemptId) {
+          resolve({ skipped: true, stale: true })
+          return
+        }
+
+        runtime.rxBuffer = ''
+        setRuntimeState(SERVICE_STATE.DISCONNECTED)
+
         console.error('[serialService] 断开失败:', err)
         emit('error', { type: 'disconnect', ...err })
         reject(err)
       }
     })
   })
+
+  runtime.disconnectPromise = promise
+
+  return promise.finally(() => {
+    if (runtime.disconnectPromise === promise) {
+      runtime.disconnectPromise = null
+    }
+  })
 }
 
 // ============================================================================
 // 数据发送
 // ============================================================================
+
+function writeSerialDirect(data, options = {}) {
+  const format = options.format || 'hex'
+  const timeout = options.timeout || 1000
+  const epoch = options.epoch
+
+  return enqueueWrite(() => new Promise((resolve, reject) => {
+    if (epoch !== undefined && epoch !== null && epoch !== runtime.commandEpoch) {
+      resolve({ skipped: true, stale: true })
+      return
+    }
+
+    if (!hasOpenPort()) {
+      reject(createNotConnectedError())
+      return
+    }
+
+    const sessionId = runtime.activeSessionId
+    const currentPortId = runtime.portId
+
+    writeSerial({
+      portId: currentPortId,
+      data,
+      format,
+      timeout,
+      success: (res) => {
+        if (sessionId !== runtime.activeSessionId) {
+          resolve({ ...res, skipped: true, stale: true })
+          return
+        }
+        if (epoch !== undefined && epoch !== null && epoch !== runtime.commandEpoch) {
+          resolve({ ...res, skipped: true, stale: true })
+          return
+        }
+        resolve(res)
+      },
+      fail: (err) => {
+        if (sessionId !== runtime.activeSessionId) {
+          resolve({ skipped: true, stale: true })
+          return
+        }
+        reject(err)
+      }
+    })
+  }))
+}
 
 /**
  * 发送数据
@@ -383,66 +805,22 @@ export function disconnect() {
  * @param {number} options.timeout - 超时时间，默认 1000ms
  * @returns {Promise}
  */
-let commandEpoch = 0
+export function send(data, options = {}) {
+  if (!hasOpenPort()) {
+    const err = createNotConnectedError()
+    emit('error', { type: 'send', ...err })
+    return Promise.reject(err)
+  }
 
-function nextCommandEpoch() {
-  commandEpoch += 1
-  return commandEpoch
-}
-
-function writeSerialDirect(data, options = {}) {
   const format = options.format || 'hex'
   const timeout = options.timeout || 1000
-  const epoch = options.epoch
 
-  return new Promise((resolve, reject) => {
-    if (epoch !== undefined && epoch !== null && epoch !== commandEpoch) {
-      resolve({ skipped: true, stale: true })
-      return
-    }
-
-    if (!isConnected || portId === 0) {
-      reject({ errCode: 10005, errMsg: 'serial not connected' })
-      return
-    }
-
-    writeSerial({
-      portId,
-      data,
-      format,
-      timeout,
-      success: (res) => {
-        resolve(res)
-      },
-      fail: (err) => {
-        reject(err)
-      }
-    })
-  })
-}
-
-export function send(data, options = {}) {
-  return new Promise((resolve, reject) => {
-    if (!isConnected || portId === 0) {
-      const err = { errCode: 10005, errMsg: '串口未连接' }
+  return writeSerialDirect(data, { format, timeout })
+    .catch((err) => {
+      console.error('[serialService] send failed:', err)
       emit('error', { type: 'send', ...err })
-      reject(err)
-      return
-    }
-
-    const format = options.format || 'hex'
-    const timeout = options.timeout || 1000
-
-    writeSerialDirect(data, { format, timeout })
-      .then((res) => {
-        resolve(res)
-      })
-      .catch((err) => {
-        console.error('[serialService] send failed:', err)
-        emit('error', { type: 'send', ...err })
-        reject(err)
-      })
-  })
+      throw err
+    })
 }
 
 /**
@@ -464,63 +842,36 @@ export function sendCommand(cmdData) {
  * 启动轮询（内部使用）
  */
 function startPolling() {
-  stopPolling()
-  
-  console.log('[serialService] 启动轮询, 间隔:', READ_INTERVAL, 'ms')
-  
-  readTimer = setInterval(() => {
-    if (!isConnected || portId === 0) {
-      stopPolling()
-      return
-    }
-    
-    readSerial({
-      portId,
-      length: READ_LENGTH,
-      format: 'hex',
-      timeout: READ_TIMEOUT,
-      success: (res) => {
-        if (res.bytesRead > 0) {
-          // 触发原始数据事件（调试用）
-          emit('raw', {
-            data: res.data,
-            bytes: res.bytesRead,
-            ts: Date.now()
-          })
-          
-          // 帧解析
-          handleReceivedData(res.data)
-        }
-      },
-      fail: (err) => {
-        // 如果是主动断开导致的错误，忽略（竞态条件：readSerial 请求在 closeSerial 之后返回）
-        if (!isConnected) {
-          return
-        }
-        // 超时（10003）忽略，其他错误上报
-        if (err.errCode !== 10003) {
-          console.error('[serialService] 读取失败:', err)
-          emit('error', { type: 'read', ...err })
-        }
-      }
-    })
-  }, READ_INTERVAL)
+  syncPolling()
 }
 
 /**
  * 停止轮询（内部使用）
  */
 function stopPolling() {
-  if (readTimer) {
-    clearInterval(readTimer)
-    readTimer = null
-    console.log('[serialService] 轮询已停止')
-  }
+  stopPollingInternal()
 }
 
 // ============================================================================
 // 帧解析
 // ============================================================================
+
+/**
+ * 在 HEX 字符串中按字节边界（步进 2）查找帧头 0x73
+ * @param {string} hexStr - 大写 HEX 字符串
+ * @param {number} [from=0] - 起始搜索位置（会自动对齐到偶数）
+ * @returns {number} 帧头所在字符索引，未找到返回 -1
+ */
+function findFrameHeadIndex(hexStr, from = 0) {
+  // 对齐到字节边界（偶数位置）
+  const start = from % 2 === 0 ? from : from + 1
+  for (let i = start; i + 1 < hexStr.length; i += 2) {
+    if (hexStr[i] === '7' && hexStr[i + 1] === '3') {
+      return i
+    }
+  }
+  return -1
+}
 
 /**
  * 处理接收到的数据（内部使用）
@@ -529,7 +880,10 @@ function stopPolling() {
  */
 function handleReceivedData(hexData) {
   // 追加到缓冲区
-  rxBuffer += hexData.toUpperCase()
+  runtime.rxBuffer += hexData.toUpperCase()
+
+  // 安全阀：脏数据洪峰时裁剪缓冲区，避免无限增长。
+  trimRxBufferOnOverflow()
   
   // 循环提取完整帧
   let loopCount = 0
@@ -538,28 +892,28 @@ function handleReceivedData(hexData) {
   while (loopCount < maxLoop) {
     loopCount++
     
-    // 查找帧头 0x73
-    const headIndex = rxBuffer.indexOf('73')
+    // 查找帧头 0x73（按字节边界步进扫描）
+    const headIndex = findFrameHeadIndex(runtime.rxBuffer)
     
     if (headIndex === -1) {
       // 没有帧头，清空缓冲区
-      rxBuffer = ''
+      runtime.rxBuffer = ''
       break
     }
     
     // 丢弃帧头之前的无效数据
     if (headIndex > 0) {
-      console.log('[serialService] 丢弃无效数据:', rxBuffer.substring(0, headIndex))
-      rxBuffer = rxBuffer.substring(headIndex)
+      console.log('[serialService] 丢弃无效数据:', runtime.rxBuffer.substring(0, headIndex))
+      runtime.rxBuffer = runtime.rxBuffer.substring(headIndex)
     }
     
     // 至少需要2字节才能判断包类型
-    if (rxBuffer.length < 4) {
+    if (runtime.rxBuffer.length < 4) {
       break
     }
     
     // 读取包类型 [1]
-    const packType = parseInt(rxBuffer.substring(2, 4), 16)
+    const packType = parseInt(runtime.rxBuffer.substring(2, 4), 16)
     
     // 根据包类型确定帧长度
     let frameHexLength, crcOffset
@@ -572,34 +926,40 @@ function handleReceivedData(hexData) {
     } else {
       // 未知包类型，跳过这个帧头，继续查找
       console.warn('[serialService] unknown pack type:', packType.toString(16))
-      rxBuffer = rxBuffer.substring(2)
+      runtime.rxBuffer = runtime.rxBuffer.substring(2)
       continue
     }
     
     // 检查是否有足够的数据构成完整帧
-    if (rxBuffer.length < frameHexLength) {
+    if (runtime.rxBuffer.length < frameHexLength) {
       break
     }
     
     // 提取一帧
-    const frameHex = rxBuffer.substring(0, frameHexLength)
+    const frameHex = runtime.rxBuffer.substring(0, frameHexLength)
     const frameBytes = hexToBytes(frameHex)
     
     // 验证帧尾
     const tailByte = frameBytes[frameBytes.length - 1]
     if (tailByte !== FRAME_TAIL) {
       console.warn('[serialService] frame tail check failed:', tailByte.toString(16), 'expected: 65')
-      rxBuffer = rxBuffer.substring(2)
+      runtime.rxBuffer = runtime.rxBuffer.substring(2)
       continue
     }
     
     // CRC 校验
     const crcResult = verifyCrc(frameBytes, crcOffset)
     
+    // 移除已处理的数据（无论 CRC 是否通过都要推进缓冲区）
+    runtime.rxBuffer = runtime.rxBuffer.substring(frameHexLength)
+    
     if (!crcResult.valid) {
       console.warn('[serialService] crc check failed:',
         'expected', crcResult.expected.toString(16).toUpperCase(),
-        'actual', crcResult.actual.toString(16).toUpperCase())
+        'actual', crcResult.actual.toString(16).toUpperCase(),
+        'frame:', frameHex)
+      // CRC 无效帧不进入业务事件，跳过
+      continue
     }
     
     // 解析帧内容
@@ -614,12 +974,9 @@ function handleReceivedData(hexData) {
       raw: frameHex,
       parsed: parsedFrame,
       bytes: frameBytes.length,
-      crcValid: crcResult.valid,
+      crcValid: true,
       ts: Date.now()
     })
-    
-    // 移除已处理的数据
-    rxBuffer = rxBuffer.substring(frameHexLength)
   }
 }
 
@@ -823,9 +1180,12 @@ function buildD180Frame(options = {}) {
  */
 export function getStatus() {
   return {
-    isConnected,
-    portId,
-    config: { ...currentConfig }
+    isConnected: hasOpenPort(),
+    state: runtime.state,
+    portId: runtime.portId,
+    config: cloneConfig(runtime.currentConfig),
+    isReading: runtime.read.running,
+    manualReadLocks: runtime.read.manualLocks
   }
 }
 
@@ -860,76 +1220,8 @@ export function scanDevices(prefixes = ['/dev/ttyS', '/dev/ttyUSB', '/dev/ttyAMA
 // 工作状态控制（发送+读取并行）
 // ============================================================================
 
-let sendTimer = null
-let workingForce = 0
-let workingMode = 0
-let workingEpoch = 0
-let shutdownEpoch = 0
-let shutdownTimer = null   // stopForce() 关机序列 interval
-let shutdownTimeout = null // stopForce() 关机序列 timeout
-let shutdownPollingTimeout = null // stopForce() 保留轮询确认窗口 timeout
-let shutdownKeepPolling = false
-
-/**
- * 启动工作状态（周期发送 + 轮询读取）
- * @param {number} force - 力量值 (kg)
- * @param {number} forceMode - 力量模式
- * @param {number} sendInterval - 发送间隔，默认 200ms (5Hz)
- */
-export function startWorking(force, forceMode, sendInterval = 200) {
-  // 取消进行中的关机序列（防止重新开机时被 OFF 帧干扰）
-  _cancelShutdownSequence()
-  // 先停止之前的
-  stopWorking()
-  
-  workingForce = force
-  workingMode = forceMode
-  workingEpoch = nextCommandEpoch()
-  
-  console.log('[serialService] 启动工作状态, force:', force, 'mode:', forceMode, 'interval:', sendInterval)
-  
-  // 启动发送定时器
-  sendTimer = setInterval(() => {
-    _sendD180Frame(workingForce, workingMode, workingEpoch, 'working')
-      .catch((err) => {
-        console.error('[serialService] working send failed:', err)
-      })
-  }, sendInterval)
-  
-  // 启动轮询读取
-  startPolling()
-}
-
-/**
- * 停止工作状态
- */
-export function stopWorking(options = {}) {
-  const keepPolling = !!options.keepPolling
-  nextCommandEpoch()
-  workingEpoch = 0
-  if (sendTimer) {
-    clearInterval(sendTimer)
-    sendTimer = null
-    console.log('[serialService] 发送定时器已停止')
-  }
-  if (!keepPolling) {
-    stopPolling()
-  }
-}
-
-/**
- * 内部：取消关机发送序列
- */
-function _cancelShutdownSequence() {
-  if (shutdownTimer) { clearInterval(shutdownTimer); shutdownTimer = null }
-  if (shutdownTimeout) { clearTimeout(shutdownTimeout); shutdownTimeout = null }
-  if (shutdownPollingTimeout) { clearTimeout(shutdownPollingTimeout); shutdownPollingTimeout = null }
-  shutdownEpoch = 0
-  shutdownKeepPolling = false
-}
-
 function _sendD180Frame(force, forceMode, epoch = null, logLabel = 'single') {
-  if (!isConnected || portId === 0) {
+  if (!hasOpenPort()) {
     console.warn('[serialService] skip D180 send: serial not connected')
     return Promise.resolve({ skipped: true, disconnected: true })
   }
@@ -946,10 +1238,52 @@ function _sendD180Frame(force, forceMode, epoch = null, logLabel = 'single') {
 }
 
 /**
+ * 启动工作状态（周期发送 + 轮询读取）
+ * @param {number} force - 力量值 (kg)
+ * @param {number} forceMode - 力量模式
+ * @param {number} sendInterval - 发送间隔，默认 200ms (5Hz)
+ */
+export function startWorking(force, forceMode, sendInterval = 200) {
+  if (!hasOpenPort()) {
+    const err = createNotConnectedError()
+    console.warn('[serialService] startWorking skipped: serial not connected')
+    emit('error', { type: 'startWorking', ...err })
+    return
+  }
+
+  _cancelShutdownSequence()
+  clearWorkingTimer()
+  nextCommandEpoch()
+
+  runtime.working.force = force
+  runtime.working.mode = forceMode
+  runtime.working.interval = sendInterval
+  runtime.working.epoch = runtime.commandEpoch
+
+  setRuntimeState(SERVICE_STATE.WORKING)
+
+  console.log('[serialService] 启动工作状态, force:', force, 'mode:', forceMode, 'interval:', sendInterval)
+
+  _sendD180Frame(runtime.working.force, runtime.working.mode, runtime.working.epoch, 'working')
+    .catch((err) => {
+      console.error('[serialService] working send failed:', err)
+    })
+
+  runtime.working.timer = setInterval(() => {
+    _sendD180Frame(runtime.working.force, runtime.working.mode, runtime.working.epoch, 'working')
+      .catch((err) => {
+        console.error('[serialService] working send failed:', err)
+      })
+  }, sendInterval)
+
+  syncPolling()
+}
+
+/**
  * 停止力量输出（安全关机序列）
  *
  * 流程：
- * 1. 停止周期发送（stopWorking）
+ * 1. 停止工作态周期发送
  * 2. 立即发一帧 force=5, mode=OFF
  * 3. 按 interval 持续发 OFF 帧，共发 duration ms
  * 4. 到期后自动结束
@@ -962,13 +1296,6 @@ function _sendD180Frame(force, forceMode, epoch = null, logLabel = 'single') {
  * @param {boolean} [options.keepPolling=false] 停力期间是否保留轮询读取
  * @param {number}  [options.pollingDuration=duration] 轮询确认窗口时长(ms)
  */
-
-/*  stopForce 做的事情
-  - 先 _cancelShutdownSequence()
-  - 再 stopWorking()
-  - 然后立刻发 1 次 force=5, mode=OFF
-  - 接着开一个 setInterval，按 interval 持续补发 OFF
-  - 到 duration 后用 setTimeout 停掉这个序列 */
 export function stopForce({
   duration = 2000,
   interval = 200,
@@ -978,44 +1305,61 @@ export function stopForce({
   const effectivePollingDuration = keepPolling
     ? Math.max(duration, pollingDuration)
     : duration
-  
+
   _cancelShutdownSequence()
-  
-  stopWorking({ keepPolling })
-  shutdownEpoch = nextCommandEpoch()
-  shutdownKeepPolling = keepPolling
-  
-  _sendD180Frame(5, FORCE_MODE.OFF, shutdownEpoch, 'shutdown')
+  clearWorkingTimer()
+  nextCommandEpoch()
+
+  runtime.shutdown.epoch = runtime.commandEpoch
+  runtime.shutdown.keepPolling = keepPolling
+
+  if (!hasOpenPort()) {
+    setRuntimeState(runtime.state === SERVICE_STATE.DISCONNECTING ? SERVICE_STATE.DISCONNECTING : SERVICE_STATE.DISCONNECTED)
+    syncPolling()
+    return
+  }
+
+  setRuntimeState(SERVICE_STATE.SHUTTING_DOWN)
+
+  _sendD180Frame(5, FORCE_MODE.OFF, runtime.shutdown.epoch, 'shutdown')
     .catch((err) => {
       console.error('[serialService] shutdown send failed:', err)
     })
-  
-  shutdownTimer = setInterval(() => {
-    _sendD180Frame(5, FORCE_MODE.OFF, shutdownEpoch, 'shutdown')
+
+  runtime.shutdown.timer = setInterval(() => {
+    _sendD180Frame(5, FORCE_MODE.OFF, runtime.shutdown.epoch, 'shutdown')
       .catch((err) => {
         console.error('[serialService] shutdown send failed:', err)
       })
   }, interval)
-  shutdownTimeout = setTimeout(() => {
-    if (shutdownTimer) { clearInterval(shutdownTimer); shutdownTimer = null }
-    if (shutdownTimeout) { clearTimeout(shutdownTimeout); shutdownTimeout = null }
+
+  runtime.shutdown.timeout = setTimeout(() => {
+    if (runtime.shutdown.timer) {
+      clearInterval(runtime.shutdown.timer)
+      runtime.shutdown.timer = null
+    }
+    if (runtime.shutdown.timeout) {
+      clearTimeout(runtime.shutdown.timeout)
+      runtime.shutdown.timeout = null
+    }
+
     console.log('[serialService] 停力序列结束')
-    if (!shutdownKeepPolling || effectivePollingDuration <= duration) {
-      if (shutdownPollingTimeout) { clearTimeout(shutdownPollingTimeout); shutdownPollingTimeout = null }
-      shutdownEpoch = 0
-      shutdownKeepPolling = false
-      stopPolling()
+
+    if (!runtime.shutdown.keepPolling || effectivePollingDuration <= duration) {
+      endShutdownState()
+    } else {
+      syncPolling()
     }
   }, duration)
+
   if (keepPolling && effectivePollingDuration > duration) {
-    shutdownPollingTimeout = setTimeout(() => {
-      shutdownPollingTimeout = null
-      shutdownEpoch = 0
-      shutdownKeepPolling = false
-      stopPolling()
+    runtime.shutdown.pollingTimeout = setTimeout(() => {
+      runtime.shutdown.pollingTimeout = null
       console.log('[serialService] 停力确认读取窗口结束')
+      endShutdownState()
     }, effectivePollingDuration)
   }
+
   console.log(
     '[serialService] 停力序列启动, duration:',
     duration,
@@ -1027,6 +1371,8 @@ export function stopForce({
     effectivePollingDuration,
     'ms'
   )
+
+  syncPolling()
 }
 
 /**
@@ -1034,16 +1380,33 @@ export function stopForce({
  * 注意：正常业务页面应使用 startWorking()
  */
 export function startReading() {
-  console.log('[serialService] 启动纯读取模式')
-  startPolling()
+  runtime.read.manualLocks += 1
+  console.log('[serialService] 启动纯读取模式, locks:', runtime.read.manualLocks)
+  syncPolling()
 }
 
 /**
  * 停止读取 - 供测试页面使用
  */
 export function stopReading() {
-  console.log('[serialService] 停止纯读取模式')
-  stopPolling()
+  if (runtime.read.manualLocks > 0) {
+    runtime.read.manualLocks -= 1
+  }
+
+  if (runtime.state === SERVICE_STATE.SHUTTING_DOWN) {
+    runtime.shutdown.keepPolling = false
+    if (runtime.shutdown.pollingTimeout) {
+      clearTimeout(runtime.shutdown.pollingTimeout)
+      runtime.shutdown.pollingTimeout = null
+    }
+    if (!runtime.shutdown.timer && !runtime.shutdown.timeout) {
+      endShutdownState()
+      return
+    }
+  }
+
+  console.log('[serialService] 停止纯读取模式, locks:', runtime.read.manualLocks)
+  syncPolling()
 }
 
 /**
@@ -1052,11 +1415,11 @@ export function stopReading() {
  * @param {number} [forceMode] - 新的力量模式（可选，不传则保持当前模式）
  */
 export function updateWorkingForce(force, forceMode) {
-  workingForce = force
+  runtime.working.force = force
   if (forceMode !== undefined) {
-    workingMode = forceMode
+    runtime.working.mode = forceMode
   }
-  console.log('[serialService] 更新工作参数:', { force, mode: workingMode })
+  console.log('[serialService] 更新工作参数:', { force, mode: runtime.working.mode })
 }
 
 /**
@@ -1065,7 +1428,7 @@ export function updateWorkingForce(force, forceMode) {
  * @param {number} forceMode - 力量模式
  */
 export function sendOnce(force, forceMode) {
-  _sendD180Frame(force, forceMode, commandEpoch, 'single')
+  _sendD180Frame(force, forceMode, runtime.commandEpoch, 'single')
     .catch((err) => {
       console.error('[serialService] single send failed:', err)
     })
@@ -1075,7 +1438,7 @@ export function sendOnce(force, forceMode) {
  * 查询是否在工作状态
  */
 export function isWorking() {
-  return sendTimer !== null
+  return runtime.state === SERVICE_STATE.WORKING && runtime.working.timer !== null
 }
 
 // ============================================================================
@@ -1087,13 +1450,24 @@ export function isWorking() {
  */
 export function cleanup() {
   console.log('[serialService] 清理资源...')
-  
-  _cancelShutdownSequence()  // 取消进行中的停力序列
-  stopWorking()              // 停止工作状态（包含 stopPolling）
-  
-  if (isConnected && portId > 0) {
+
+  runtime.connectAttemptId += 1
+  runtime.disconnectAttemptId += 1
+  runtime.activeSessionId += 1
+
+  clearWorkingTimer()
+  _cancelShutdownSequence()
+  runtime.read.manualLocks = 0
+  stopPollingInternal()
+
+  const closingPortId = runtime.portId
+  runtime.portId = 0
+  runtime.rxBuffer = ''
+  setRuntimeState(SERVICE_STATE.DISCONNECTED)
+
+  if (closingPortId > 0) {
     closeSerial({
-      portId,
+      portId: closingPortId,
       success: () => {
         console.log('[serialService] 串口已关闭')
       },
@@ -1101,12 +1475,8 @@ export function cleanup() {
         console.error('[serialService] 关闭失败:', err)
       }
     })
-    isConnected = false
-    portId = 0
   }
-  
-  rxBuffer = ''
-  
+
   // 清空所有监听器
   Object.keys(listeners).forEach(key => {
     listeners[key] = []
@@ -1124,7 +1494,6 @@ export default {
   
   // 工作状态控制
   startWorking,
-  stopWorking,
   stopForce,
   updateWorkingForce,
   sendOnce,

@@ -117,7 +117,7 @@ const decreaseReps = () => {
 	border-radius: 24rpx;
 	padding: 24rpx;
 	box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
-	transition: all 0.2s ease;
+	transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
 .selected-card--dragging {

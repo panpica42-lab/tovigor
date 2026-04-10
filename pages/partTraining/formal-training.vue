@@ -7,10 +7,10 @@
  * | 操作场景     | 发送         | 读取         | 说明                      |
  * |-------------|-------------|-------------|---------------------------|
  * | 开启开关     | 启动 5Hz 周期 | 启动 50ms 轮询 | startWorking()            |
- * | 关闭开关     | 停止 + 单次OFF | 停止轮询     | stopWorking() + sendOnce() |
+ * | 关闭开关     | 安全停力序列   | 停止轮询     | stopForce()                |
  * | 滑块拖动中   | -           | -            | 仅更新UI                   |
  * | 滑块松手     | 更新下次发送值 | -            | updateWorkingForce()      |
- * | 页面卸载     | 停止 + 单次OFF | 停止轮询     | 安全关闭                   |
+ * | 页面卸载     | 安全停力序列   | 停止轮询     | stopForce()                |
  -->
 <template>
 	<view class="formal-training-page">
@@ -387,9 +387,8 @@ const togglePower = () => {
 		// 开启：启动工作状态（周期发送 + 轮询读取）
 		serialService.startWorking(currentWeight.value, FORCE_MODE.CONST, 200)  // 5Hz
 	} else {
-		// 关闭：停止工作状态，发送关闭命令
-		serialService.stopWorking()
-		serialService.sendOnce(5, FORCE_MODE.OFF)  // force=5, mode=OFF
+		// 关闭：统一走安全停力序列
+		serialService.stopForce()
 	}
 }
 
@@ -411,8 +410,7 @@ onBeforeUnmount(() => {
 	console.log('正式训练页 - 页面卸载，清理资源')
 	// 确保停止工作状态
 	if (isPowerOn.value) {
-		serialService.stopWorking()
-		serialService.sendOnce(5, FORCE_MODE.OFF)  // 安全关闭
+		serialService.stopForce()
 	}
 })
 </script>

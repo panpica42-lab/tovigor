@@ -179,7 +179,7 @@ import {
 	on, 
 	off, 
 	startWorking, 
-	stopWorking,
+	stopForce,
 	updateWorkingForce,
 	getStatus 
 } from '@/utils/serialService.js'
@@ -327,7 +327,7 @@ const cleanupSerial = () => {
 	off('frame', handleFrame)
 	
 	// 停止工作状态（停止发送和轮询，但不断开连接）
-	stopWorking()
+	stopForce()
 	isAssessing.value = false
 	
 	console.log('[skip1] 串口资源已清理')

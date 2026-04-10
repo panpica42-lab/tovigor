@@ -18,15 +18,18 @@
 		
 		<!-- 内容区域 -->
 		<view class="content">
-			<!-- AI 助手标签 -->
-			<view class="ai-badge">
-				<text class="ai-text">AI助手</text>
-			</view>
-			
-			<!-- 提示文字框 -->
-			<view class="tip-card">
-				<text class="tip-text">请按照指示连接外部体脂秤进行评估</text>
-			</view>
+			<!-- AI教练气泡对话框 -->
+			<BubbleDialogBox
+				:roleLabel="coachRoleLabel"
+				:avatarUrl="coachAvatarUrl"
+				:badgeBackground="coachBadgeBackground"
+				text="请按照指示连接外部体脂秤进行评估"
+				contentBackground="rgba(255, 255, 255, 0.85)"
+				:showShadow="true"
+				:clickable="true"
+				@coach-click="openCoachModal"
+				class="bubble-tip"
+			/>
 			
 			<!-- 体脂秤图片 -->
 			<view class="device-image-wrapper">
@@ -37,10 +40,45 @@
 				/>
 			</view>
 		</view>
+		
+		<!-- AI教练选择弹窗 -->
+		<CoachDetailModal
+			v-model:show="showCoachModal"
+			:coachData="selectedCoach"
+			:switchable="true"
+			@select="handleCoachSelect"
+		/>
 	</view>
 </template>
 
 <script setup>
+import { ref, computed } from 'vue'
+import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
+import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
+
+// ========== AI教练信息 ==========
+const selectedCoach = ref(getSelectedCoach())
+const coachRoleLabel = computed(() => selectedCoach.value?.fullName || 'Vince(艾斯)')
+const coachAvatarUrl = computed(() => selectedCoach.value?.avatar || '/static/icons/partTrainingActivity/AI_coach_Vince.png')
+const coachBadgeBackground = computed(() => selectedCoach.value?.badgeBackground || 'linear-gradient(135deg, #4A90E2 0%, #357ABD 100%)')
+
+// 教练选择弹窗
+const showCoachModal = ref(false)
+
+const openCoachModal = () => {
+	showCoachModal.value = true
+}
+
+const handleCoachSelect = (coachData) => {
+	setSelectedCoach(coachData.value)
+	selectedCoach.value = coachData
+	uni.showToast({
+		title: `已切换为${coachData.label}`,
+		icon: 'success'
+	})
+}
+
 // 返回上一页
 const goBack = () => {
 	uni.navigateBack()
@@ -109,38 +147,10 @@ const goBack = () => {
 	padding: 40rpx 30rpx;
 }
 
-/* AI 助手标签 */
-.ai-badge {
-	background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-	border-radius: 50rpx;
-	padding: 12rpx 32rpx;
-	margin-bottom: 20rpx;
-	box-shadow: 0 4rpx 12rpx rgba(255, 165, 0, 0.3);
-}
-
-.ai-text {
-	font-size: 26rpx;
-	font-weight: bold;
-	color: #FFFFFF;
-	letter-spacing: 2rpx;
-}
-
-/* 提示文字框 */
-.tip-card {
+/* AI 助手气泡 */
+.bubble-tip {
 	width: 100%;
-	background: #FFFFFF;
-	border-radius: 20rpx;
-	padding: 30rpx 24rpx;
-	margin-bottom: 60rpx;
-	box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
-}
-
-.tip-text {
-	font-size: 28rpx;
-	color: #333333;
-	text-align: center;
-	line-height: 1.6;
-	display: block;
+	margin-bottom: 40rpx;
 }
 
 /* 设备图片 */

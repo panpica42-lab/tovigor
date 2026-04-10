@@ -111,26 +111,10 @@
 		</view>
 		
 		<!-- 训练完成弹窗 -->
-		<view v-if="isFinishModalVisible" class="finish-modal-overlay">
-			<!-- 弹窗内容 -->
-			<view class="finish-modal-content">
-				<!-- 完成图片 -->
-				<image 
-					class="finish-popup-image" 
-					src="/static/icons/partTrainingActivity/startTraining/finish-pop-up.jpg" 
-					mode="widthFix"
-				/>
-				
-				<!-- 关闭按钮 -->
-				<view class="finish-close-btn" @click="closeFinishModal">
-					<image 
-						class="finish-close-icon" 
-						src="/static/icons/general/btn_general_close.svg" 
-						mode="aspectFit"
-					/>
-				</view>
-			</view>
-		</view>
+		<TrainingCompleteWindow
+			v-model:visible="isFinishModalVisible"
+			@confirm="closeFinishModal"
+		/>
 		
 		<!-- AI教练选择弹窗 -->
 		<CoachDetailModal
@@ -149,6 +133,7 @@ import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
 import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
 import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import TrainingCompleteWindow from '@/components/modals/training-complete-window.vue'
 import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 
 // ========== 测试开关 ==========
@@ -550,49 +535,5 @@ const closeVirtualCharacter = () => {
 	font-weight: 600;
 }
 
-/* ========== 训练完成弹窗 ========== */
-.finish-modal-overlay {
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	z-index: 600;
-	background-color: rgba(0, 0, 0, 0.7);
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-}
-
-.finish-modal-content {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 48rpx;
-}
-
-.finish-popup-image {
-	width: 600rpx;
-	border-radius: 24rpx;
-	box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.3);
-}
-
-.finish-close-btn {
-	width: 80rpx;
-	height: 80rpx;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-}
-
-.finish-close-btn:active {
-	opacity: 0.7;
-	transform: scale(0.95);
-}
-
-.finish-close-icon {
-	width: 64rpx;
-	height: 64rpx;
-}
+/* ========== 训练完成弹窗（由 TrainingCompleteWindow 组件负责样式） ========== */
 </style>
