@@ -79,20 +79,6 @@
 			<StepBar :totalSteps="totalSteps" :currentStep="currentStep" />
 		</view>
 		
-		<!-- AI教练气泡对话框 -->
-		<view class="coach-dialog-section">
-			<BubbleDialogBox
-				:roleLabel="coachRoleLabel"
-				:avatarUrl="coachAvatarUrl"
-				:badgeBackground="coachBadgeBackground"
-				:text="currentCoachTip"
-				contentBackground="rgba(255, 255, 255, 0.85)"
-				:showShadow="true"
-				:clickable="true"
-				@coach-click="openCoachModal"
-			/>
-		</view>
-		
 		<!-- 右侧数据看板区域 -->
 		<view class="data-panels">
 			<!-- 组数/次数看板 -->
@@ -213,13 +199,6 @@
 			</view>
 		</view>
 		
-		<!-- AI教练选择弹窗 -->
-		<CoachDetailModal
-			v-model:show="showCoachModal"
-			:coachData="selectedCoach"
-			:switchable="true"
-			@select="handleCoachSelect"
-		/>
 	</view>
 </template>
 
@@ -228,11 +207,8 @@ import { ref, computed, onMounted, onBeforeUnmount, getCurrentInstance } from 'v
 import { onShow } from '@dcloudio/uni-app'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
-import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
 import DataPanel from '@/components/ui-box/data-panel.vue'
 import PowerSlider from '@/components/ui-box/power-slider.vue'
-import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
-import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 import serialService, { FORCE_MODE } from '@/utils/serialService.js'
 
 // ========== 训练数据 ==========
@@ -270,42 +246,7 @@ const displayWeight = computed(() => {
 const isAtMinLimit = computed(() => currentWeight.value <= sliderMin)
 const isAtMaxLimit = computed(() => currentWeight.value >= sliderMax)
 
-// ========== AI教练信息 ==========
-const selectedCoach = ref(null)
-const coachRoleLabel = computed(() => selectedCoach.value?.fullName || 'Vince(艾斯)')
-const coachAvatarUrl = computed(() => selectedCoach.value?.avatar || '/static/icons/partTrainingActivity/AI_coach_Vince.png')
-const coachBadgeBackground = computed(() => selectedCoach.value?.badgeBackground || 'linear-gradient(135deg, #4A90E2 0%, #357ABD 100%)')
-
-// 教练选择弹窗状态
-const showCoachModal = ref(false)
-
-// 打开教练选择弹窗
-const openCoachModal = () => {
-	showCoachModal.value = true
-}
-
-// 处理教练选择
-const handleCoachSelect = (coachData) => {
-	setSelectedCoach(coachData.value)
-	selectedCoach.value = coachData
-	uni.showToast({
-		title: `已切换为${coachData.label}`,
-		icon: 'success'
-	})
-}
-
-// AI教练提示语
-const coachTips = [
-	'上半身保持竖直，膝盖不要弯曲',
-	'保持呼吸节奏，发力时呼气',
-	'动作要慢，感受肌肉发力',
-	'核心收紧，不要借力',
-	'很棒！保持这个节奏'
-]
-const currentTipIndex = ref(0)
-const currentCoachTip = computed(() => coachTips[currentTipIndex.value])
-
-// ========== 控制面板 ==========
+// ========== 控制面板 ===========
 const isControlPanelVisible = ref(false)
 
 const showControlPanel = () => {
@@ -402,8 +343,7 @@ const closeVirtualCharacter = () => {
 
 // ========== 生命周期 ==========
 onMounted(() => {
-	selectedCoach.value = getSelectedCoach()
-	console.log('正式训练页 - 当前教练:', selectedCoach.value)
+	console.log('正式训练页 - 页面挂载')
 })
 
 onBeforeUnmount(() => {
@@ -470,15 +410,6 @@ onBeforeUnmount(() => {
 	left: 24rpx;
 	right: 24rpx;
 	z-index: 90;
-}
-
-/* ========== AI教练气泡 ========== */
-.coach-dialog-section {
-	position: absolute;
-	top: 180rpx;
-	left: 24rpx;
-	right: 240rpx;
-	z-index: 80;
 }
 
 /* ========== 右侧数据看板 ========== */

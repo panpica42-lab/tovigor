@@ -50,7 +50,7 @@ const props = defineProps({
 	// 头像图片地址
 	avatarUrl: {
 		type: String,
-		default: '/static/icons/homeActivity/trimming.png'
+		default: '/static/icons/partTrainingActivity/AI_coach_Vince.png'
 	},
 	// 标签背景色/渐变
 	badgeBackground: {
