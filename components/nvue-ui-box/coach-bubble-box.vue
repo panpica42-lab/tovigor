@@ -8,7 +8,8 @@
  *
  * 对外 API：
  *   Props:
- *     text        - 气泡文字内容（必传，由页面控制提示语）
+ *     text         - 气泡文字内容（必传，由页面控制提示语）
+ *     bubbleWidth  - 可选，限制对话气泡内容宽度，避免在页面浮层中压住其他组件
  *   Events:
  *     coach-changed(coachData)  - 教练切换后通知页面（可选监听）
  *
@@ -38,7 +39,7 @@
 			</view>
 
 			<!-- 下方对话气泡 -->
-			<view class="cb-content">
+			<view class="cb-content" :style="contentStyle">
 				<text class="cb-content-text">{{ text }}</text>
 			</view>
 		</view>
@@ -111,8 +112,15 @@ export default {
 		text: {
 			type: String,
 			default: ''
+		},
+		// 可选宽度限制，用于浮层较多的页面上控制文案换行范围
+		bubbleWidth: {
+			type: String,
+			default: ''
 		}
 	},
+
+	emits: ['coach-changed', 'modal-open', 'modal-close'],
 
 	data() {
 		const coach = getSelectedCoach()
@@ -133,6 +141,11 @@ export default {
 			return match ? match[0] : '#667eea'
 		},
 
+		// 仅在页面显式传入时限制宽度，默认保持组件原有自适应行为
+		contentStyle() {
+			return this.bubbleWidth ? { width: this.bubbleWidth } : {}
+		},
+
 		previewCoachData() {
 			return getCoachByValue(this.previewValue) || this.currentCoach
 		}
@@ -142,10 +155,13 @@ export default {
 		openModal() {
 			this.previewValue = this.currentCoach.value
 			this.modalVisible = true
+			this.$emit('modal-open')
 		},
 
 		closeModal() {
+			if (!this.modalVisible) return
 			this.modalVisible = false
+			this.$emit('modal-close')
 		},
 
 		previewCoach(val) {
@@ -156,7 +172,7 @@ export default {
 			setSelectedCoach(this.previewValue)
 			this.currentCoach = getCoachByValue(this.previewValue)
 			this.$emit('coach-changed', this.currentCoach)
-			this.modalVisible = false
+			this.closeModal()
 		}
 	}
 }

@@ -1,0 +1,909 @@
+<!--
+ * 正式训练页面（nvue）
+ * 功能：正式训练阶段的主界面，包含训练进度、数据看板与力量控制
+ *
+ * nvue 兼容说明：
+ *   - 使用 Options API，避免 Composition API 在 nvue 上的兼容波动
+ *   - 基础组件统一切到 components/nvue-ui-box
+ *   - 串口通过 nvueSerialMixin 管理，避免直接复用 WebView 上下文
+ *   - 避免自定义组件 v-model 与遮罩 stop 修饰符，尽量贴近现有可运行 nvue 页面模式
+ -->
+<template>
+	<view class="formal-training-page" :style="containerStyle">
+		<!-- 原生 video 做背景，点击交给单独的透明层处理，避免不同设备上视频本体吞事件 -->
+		<video
+			id="formalTrainingBackgroundVideo"
+			class="background-video"
+			:style="fullScreenStyle"
+			:src="backgroundVideoSrc"
+			loop
+			muted
+			autoplay
+			:controls="false"
+			:show-center-play-btn="false"
+			:show-play-btn="false"
+			:enable-progress-gesture="false"
+			object-fit="fill"
+			@loadedmetadata="onBackgroundVideoLoaded"
+			@ended="onBackgroundVideoEnded"
+		></video>
+		<view class="background-tap-layer" :style="fullScreenStyle" @tap="showControlPanel"></view>
+
+		<view v-if="isControlPanelVisible" class="control-panel-overlay" :style="fullScreenStyle">
+			<view class="control-panel-mask" :style="fullScreenStyle" @click="hideControlPanel"></view>
+			<view class="control-panel-content" :style="fullScreenStyle">
+				<view class="control-buttons">
+					<view class="control-btn control-btn-side" @click="handlePrevStep">
+						<image
+							class="control-btn-icon control-btn-icon-side"
+							src="/static/icons/general/btn_last_step.svg"
+							mode="aspectFit"
+						></image>
+						<text class="control-btn-text">练前热身</text>
+					</view>
+
+					<view class="control-btn control-btn-center" @click="handleContinue">
+						<image
+							class="control-btn-icon control-btn-icon-center"
+							src="/static/icons/general/btn_playing_white.svg"
+							mode="aspectFit"
+						></image>
+					</view>
+
+					<view class="control-btn control-btn-side" @click="handleNextStep">
+						<image
+							class="control-btn-icon control-btn-icon-side"
+							src="/static/icons/general/btn_next_step.svg"
+							mode="aspectFit"
+						></image>
+						<text class="control-btn-text">练后拉伸</text>
+					</view>
+				</view>
+
+				<view class="exit-btn" @click="handleExitTraining">
+					<text class="exit-btn-text">退出训练</text>
+				</view>
+			</view>
+		</view>
+
+		<CommonBackButton
+			class="back-btn-position"
+			:useDefault="false"
+			@click="handleBack"
+		></CommonBackButton>
+
+		<view class="header-title">
+			<text class="title-text">{{ currentExerciseName }}</text>
+		</view>
+
+		<view class="progress-section">
+			<StepBar :totalSteps="totalSteps" :currentStep="currentStep"></StepBar>
+		</view>
+
+		<!-- 顶部状态区统一放进一行布局，避免 nvue 上气泡文案变长后压住右侧数据看板。 -->
+		<view class="top-status-section">
+			<view class="coach-dialog-section">
+				<CoachBubbleBox
+					:text="coachBubbleText"
+					bubble-width="400rpx"
+				></CoachBubbleBox>
+			</view>
+
+			<view class="data-panels">
+				<view class="data-panel-item">
+					<DataPanel
+						icon="/static/icons/freeTrainingActivity/ic_counts.png"
+						label="组数/次数"
+						:value="setRepValue"
+					></DataPanel>
+				</view>
+				<view class="data-panel-item">
+					<DataPanel
+						icon="/static/icons/freeTrainingActivity/ic_calories.png"
+						label="热量/千卡"
+						:value="calories"
+						:decimals="2"
+					></DataPanel>
+				</view>
+			</view>
+		</view>
+
+		<view class="virtual-character-container">
+			<image
+				class="close-btn-svg"
+				src="/static/icons/general/btn_general_close.svg"
+				mode="aspectFit"
+				@click="closeVirtualCharacter"
+			></image>
+			<text class="virtual-title">虚拟形象模拟</text>
+			<image
+				class="virtual-character-image"
+				src="/static/icons/partTrainingActivity/startTraining/virtual-character.png"
+				mode="aspectFit"
+			></image>
+		</view>
+
+		<!-- 力量曲线区域占位：当前先保留标题提示，实际曲线图后续接入。 -->
+		<view class="strength-label">
+			<image
+				class="strength-icon"
+				src="/static/icons/partTrainingActivity/startTraining/icon-strength.svg"
+				mode="aspectFit"
+			></image>
+			<text class="strength-text">力量</text>
+		</view>
+
+		<view class="heart-rate-section">
+			<view class="heart-rate-panel">
+				<DataPanel
+					icon="/static/icons/partTrainingActivity/startTraining/ic_heart.png"
+					label="心率"
+					:value="heartRate"
+					unit="次/分钟"
+					valueColor="#E53935"
+					labelColor="#E53935"
+					unitColor="#E53935"
+				></DataPanel>
+			</view>
+			<view class="heart-rate-curve">
+				<image
+					class="curve-image"
+					src="/static/icons/partTrainingActivity/startTraining/heart-rate-curve.png"
+					mode="widthFix"
+				></image>
+			</view>
+		</view>
+
+		<view class="strength-control-section">
+			<view class="control-header">
+				<view class="weight-label">
+					<view class="weight-badge">
+						<text class="weight-badge-text">KG</text>
+					</view>
+					<text class="weight-text">配重</text>
+				</view>
+				<text class="weight-value">{{ displayWeightText }}KG</text>
+			</view>
+
+			<view class="switch-btn" :style="switchButtonStyle" @click="togglePower">
+				<image
+					class="switch-icon"
+					:src="switchIconSrc"
+					mode="aspectFit"
+				></image>
+			</view>
+
+			<view class="slider-row" :style="sliderRowStyle">
+				<view class="adjust-btn" :style="minusButtonStyle" @click="decreaseWeight">
+					<text class="adjust-btn-text">-</text>
+				</view>
+
+				<view class="power-slider-container">
+					<PowerSlider
+						:value="currentWeight"
+						:min="sliderMin"
+						:max="sliderMax"
+						:disabled="!isPowerOn"
+						@dragging="onSliderDragging"
+						@change="onSliderChange"
+					></PowerSlider>
+				</view>
+
+				<view class="adjust-btn" :style="plusButtonStyle" @click="increaseWeight">
+					<text class="adjust-btn-text">+</text>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script>
+import CommonBackButton from '@/components/nvue-ui-box/common-back-button.vue'
+import StepBar from '@/components/nvue-ui-box/step-bar.vue'
+import DataPanel from '@/components/nvue-ui-box/data-panel.vue'
+import PowerSlider from '@/components/nvue-ui-box/power-slider.vue'
+import CoachBubbleBox from '@/components/coach-bubble-box.vue'
+import nvueSerialMixin from '@/utils/nvueSerialMixin.js'
+
+const SLIDER_MIN = 5
+const SLIDER_MAX = 55
+const WORKING_INTERVAL = 200
+const HIDDEN_DISCONNECT_DELAY = 2200
+const BACKGROUND_VIDEO_SRC = '/static/icons/general/video-placeholder-2.mp4'
+
+export default {
+	components: {
+		CommonBackButton,
+		StepBar,
+		DataPanel,
+		PowerSlider,
+		CoachBubbleBox
+	},
+
+	mixins: [nvueSerialMixin],
+
+	data() {
+		return {
+			screenWidth: 0,
+			screenHeight: 0,
+			currentExerciseName: '站姿肩关节环绕',
+			totalSteps: 12,
+			currentStep: 8,
+			currentSet: 5,
+			currentRep: 13,
+			calories: 68.88,
+			heartRate: 33,
+			currentWeight: 30,
+			isPowerOn: false,
+			sliderMin: SLIDER_MIN,
+			sliderMax: SLIDER_MAX,
+			dragDisplayValue: 30,
+			isDraggingSlider: false,
+			isControlPanelVisible: false,
+			serialDisconnectTimer: null,
+			backgroundVideoCtx: null,
+			canInitBackgroundVideoCtx: false,
+			pendingBackgroundVideoPlay: false,
+			allowBackgroundVideoPlayback: false,
+			backgroundVideoSrc: BACKGROUND_VIDEO_SRC
+		}
+	},
+
+	computed: {
+		containerStyle() {
+			return {
+				width: this.screenWidth + 'px',
+				height: this.screenHeight + 'px'
+			}
+		},
+
+		fullScreenStyle() {
+			return {
+				width: this.screenWidth + 'px',
+				height: this.screenHeight + 'px'
+			}
+		},
+
+		setRepValue() {
+			return this.currentSet + '/' + this.currentRep
+		},
+
+		displayWeight() {
+			return this.isDraggingSlider ? this.dragDisplayValue : this.currentWeight
+		},
+
+		displayWeightText() {
+			return String(this.displayWeight)
+		},
+
+		coachBubbleText() {
+			if (!this.isPowerOn) {
+				return '准备完成后开启力量，先用能稳定控制的配重开始。'
+			}
+			if (this.isDraggingSlider) {
+				return '保持动作节奏稳定，松手后会按当前配重继续训练。'
+			}
+			return '保持肩部稳定，匀速发力，当前配重 ' + this.displayWeightText + ' KG。'
+		},
+
+		isAtMinLimit() {
+			return this.currentWeight <= this.sliderMin
+		},
+
+		isAtMaxLimit() {
+			return this.currentWeight >= this.sliderMax
+		},
+
+		switchIconSrc() {
+			return this.isPowerOn
+				? '/static/icons/partTrainingActivity/startTraining/ic_switch_on.svg'
+				: '/static/icons/partTrainingActivity/startTraining/ic_switch_off.svg'
+		},
+
+		switchButtonStyle() {
+			return {
+				backgroundColor: '#FFFFFF',
+				borderWidth: '4rpx',
+				borderStyle: 'solid',
+				borderColor: this.isPowerOn ? '#4CAF50' : 'rgba(0, 0, 0, 0.08)',
+				opacity: this.serialReady ? 1 : 0.72
+			}
+		},
+
+		sliderRowStyle() {
+			return {
+				opacity: this.isPowerOn ? 1 : 0.6
+			}
+		},
+
+		minusButtonStyle() {
+			const disabled = !this.isPowerOn || this.isAtMinLimit
+			return {
+				backgroundColor: disabled ? '#CCCCCC' : '#FF9800',
+				opacity: disabled ? 0.6 : 1
+			}
+		},
+
+		plusButtonStyle() {
+			const disabled = !this.isPowerOn || this.isAtMaxLimit
+			return {
+				backgroundColor: disabled ? '#CCCCCC' : '#4CAF50',
+				opacity: disabled ? 0.6 : 1
+			}
+		}
+	},
+
+	onLoad() {
+		const sys = uni.getSystemInfoSync()
+		this.screenWidth = sys.windowWidth
+		this.screenHeight = sys.windowHeight
+	},
+
+	onReady() {
+		setTimeout(() => {
+			this.canInitBackgroundVideoCtx = true
+			this.flushPendingBackgroundVideoPlay()
+		}, 80)
+	},
+
+	onShow() {
+		this.allowBackgroundVideoPlayback = true
+		this.cancelSerialDisconnect()
+		if (!this.serialReady) {
+			this._nvueSerialConnect()
+		}
+		this.requestPlayBackgroundVideo()
+	},
+
+	onHide() {
+		this.allowBackgroundVideoPlayback = false
+		this.pendingBackgroundVideoPlay = false
+		this.pauseBackgroundVideo()
+	},
+
+	onBackPress(options) {
+		if (options && options.from === 'navigateBack') {
+			return false
+		}
+		this.handleBack()
+		return true
+	},
+
+	beforeDestroy() {
+		this.allowBackgroundVideoPlayback = false
+		this.pendingBackgroundVideoPlay = false
+		this.cancelSerialDisconnect()
+		this.pauseBackgroundVideo()
+		this.stopPowerOutput()
+	},
+
+	methods: {
+		ensureBackgroundVideoCtx() {
+			if (!this.canInitBackgroundVideoCtx) {
+				return null
+			}
+			if (!this.backgroundVideoCtx) {
+				try {
+					this.backgroundVideoCtx = uni.createVideoContext('formalTrainingBackgroundVideo', this)
+				} catch (error) {
+					console.warn('[formal-training] createVideoContext failed:', error)
+					return null
+				}
+			}
+			return this.backgroundVideoCtx
+		},
+
+		requestPlayBackgroundVideo() {
+			if (!this.allowBackgroundVideoPlayback) {
+				this.pendingBackgroundVideoPlay = false
+				return
+			}
+			const ctx = this.ensureBackgroundVideoCtx()
+			if (!ctx) {
+				this.pendingBackgroundVideoPlay = true
+				return
+			}
+			this.pendingBackgroundVideoPlay = false
+			this.playBackgroundVideo()
+		},
+
+		flushPendingBackgroundVideoPlay() {
+			if (!this.pendingBackgroundVideoPlay) return
+			this.requestPlayBackgroundVideo()
+		},
+
+		playBackgroundVideo() {
+			const ctx = this.ensureBackgroundVideoCtx()
+			if (!ctx) return
+			try {
+				ctx.play()
+			} catch (error) {
+				console.warn('[formal-training] play background video failed:', error)
+			}
+		},
+
+		pauseBackgroundVideo() {
+			if (!this.backgroundVideoCtx) return
+			try {
+				this.backgroundVideoCtx.pause()
+			} catch (error) {
+				console.warn('[formal-training] pause background video failed:', error)
+			}
+		},
+
+		onBackgroundVideoLoaded() {
+			this.requestPlayBackgroundVideo()
+		},
+
+		onBackgroundVideoEnded() {
+			this.playBackgroundVideo()
+		},
+
+		showControlPanel() {
+			this.isControlPanelVisible = true
+		},
+
+		hideControlPanel() {
+			this.isControlPanelVisible = false
+		},
+
+		cancelSerialDisconnect() {
+			if (this.serialDisconnectTimer) {
+				clearTimeout(this.serialDisconnectTimer)
+				this.serialDisconnectTimer = null
+			}
+		},
+
+		// 跳去热身/拉伸后当前页通常还留在栈里，这里延迟断开，避免隐藏页一直占着 nvue 串口上下文。
+		scheduleSerialDisconnect() {
+			this.cancelSerialDisconnect()
+			this.serialDisconnectTimer = setTimeout(() => {
+				this.serialDisconnectTimer = null
+				if (!this.isPowerOn) {
+					this._nvueSerialDisconnect()
+				}
+			}, HIDDEN_DISCONNECT_DELAY)
+		},
+
+		handleContinue() {
+			this.hideControlPanel()
+		},
+
+		handlePrevStep() {
+			this.isControlPanelVisible = false
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.stopPowerOutput()
+			this.scheduleSerialDisconnect()
+			uni.navigateTo({
+				url: '/pages/partTraining/warm-up-page'
+			})
+		},
+
+		handleNextStep() {
+			this.isControlPanelVisible = false
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.stopPowerOutput()
+			this.scheduleSerialDisconnect()
+			uni.navigateTo({
+				url: '/pages/partTraining/cool-down-page'
+			})
+		},
+
+		handleExitTraining() {
+			this.isControlPanelVisible = false
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.stopPowerOutput()
+			uni.navigateBack({
+				delta: 3
+			})
+		},
+
+		handleBack() {
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.stopPowerOutput()
+			uni.navigateBack()
+		},
+
+		// 拖动中只刷新显示值，真正的配重提交统一放在 change 里处理。
+		onSliderDragging(value) {
+			this.isDraggingSlider = true
+			this.dragDisplayValue = value
+		},
+
+		onSliderChange(value) {
+			this.currentWeight = value
+			this.isDraggingSlider = false
+			this.dragDisplayValue = value
+			if (this.isPowerOn) {
+				this.$serial.updateWorkingForce(value)
+			}
+		},
+
+		increaseWeight() {
+			if (!this.isPowerOn || this.currentWeight >= this.sliderMax) return
+			this.currentWeight = Math.min(this.currentWeight + 1, this.sliderMax)
+			this.$serial.updateWorkingForce(this.currentWeight)
+		},
+
+		decreaseWeight() {
+			if (!this.isPowerOn || this.currentWeight <= this.sliderMin) return
+			this.currentWeight = Math.max(this.currentWeight - 1, this.sliderMin)
+			this.$serial.updateWorkingForce(this.currentWeight)
+		},
+
+		// 开机只负责进入工作态；真正的安全停力统一收口到 stopPowerOutput。
+		togglePower() {
+			if (this.isPowerOn) {
+				this.stopPowerOutput()
+				return
+			}
+
+			this.cancelSerialDisconnect()
+			if (!this.serialReady) {
+				uni.showToast({
+					title: '设备连接中',
+					icon: 'none'
+				})
+				return
+			}
+
+			this.isPowerOn = true
+			this.$serial.startWorking(this.currentWeight, this.$FORCE_MODE.CONST, WORKING_INTERVAL)
+		},
+
+		stopPowerOutput() {
+			if (!this.isPowerOn) return
+			this.isPowerOn = false
+			this.isDraggingSlider = false
+			this.$serial.stopForce()
+		},
+
+		closeVirtualCharacter() {
+			uni.showToast({
+				title: '功能开发中',
+				icon: 'none'
+			})
+		}
+	}
+}
+</script>
+
+<style>
+.formal-training-page {
+	position: relative;
+	background-color: #000000;
+}
+
+.background-video {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 0;
+}
+
+.background-tap-layer {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 1;
+	background-color: rgba(0, 0, 0, 0.001);
+}
+
+.back-btn-position {
+	position: absolute;
+	left: 24rpx;
+	top: 24rpx;
+	z-index: 100;
+}
+
+.header-title {
+	position: absolute;
+	top: 24rpx;
+	left: 0;
+	right: 0;
+	z-index: 90;
+	height: 88rpx;
+	align-items: center;
+	justify-content: center;
+}
+
+.title-text {
+	font-size: 36rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.progress-section {
+	position: absolute;
+	top: 120rpx;
+	left: 24rpx;
+	right: 24rpx;
+	z-index: 90;
+}
+
+.top-status-section {
+	position: absolute;
+	top: 156rpx;
+	left: 24rpx;
+	right: 24rpx;
+	z-index: 85;
+	flex-direction: row;
+	align-items: flex-start;
+	justify-content: space-between;
+}
+
+.coach-dialog-section {
+	flex: 1;
+	padding-right: 20rpx;
+}
+
+.data-panels {
+	width: 210rpx;
+	z-index: 80;
+}
+
+.data-panel-item {
+	margin-bottom: 16rpx;
+}
+
+.virtual-character-container {
+	position: absolute;
+	left: 24rpx;
+	bottom: 380rpx;
+	z-index: 70;
+	width: 180rpx;
+	padding-top: 20rpx;
+	padding-bottom: 20rpx;
+	padding-left: 20rpx;
+	padding-right: 20rpx;
+	align-items: center;
+	background-color: rgba(255, 255, 255, 0.72);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.18);
+	border-radius: 16rpx;
+}
+
+.close-btn-svg {
+	position: absolute;
+	top: 8rpx;
+	left: 8rpx;
+	z-index: 10;
+	width: 18rpx;
+	height: 18rpx;
+}
+
+.virtual-title {
+	margin-bottom: 12rpx;
+	font-size: 18rpx;
+	font-weight: 600;
+	color: #333333;
+}
+
+.virtual-character-image {
+	width: 140rpx;
+	height: 140rpx;
+}
+
+.strength-label {
+	position: absolute;
+	left: 24rpx;
+	bottom: 320rpx;
+	z-index: 70;
+	flex-direction: row;
+	align-items: center;
+}
+
+.strength-icon {
+	width: 24rpx;
+	height: 24rpx;
+	margin-right: 8rpx;
+}
+
+.strength-text {
+	font-size: 24rpx;
+	font-weight: 500;
+	color: #FFFFFF;
+}
+
+.heart-rate-section {
+	position: absolute;
+	right: 24rpx;
+	bottom: 280rpx;
+	z-index: 70;
+	align-items: flex-end;
+}
+
+.heart-rate-panel {
+	margin-bottom: 12rpx;
+}
+
+.heart-rate-curve {
+	width: 300rpx;
+	height: 60rpx;
+}
+
+.curve-image {
+	width: 300rpx;
+}
+
+.strength-control-section {
+	position: absolute;
+	left: 24rpx;
+	right: 24rpx;
+	bottom: 24rpx;
+	z-index: 100;
+	padding-top: 16rpx;
+	padding-bottom: 20rpx;
+	padding-left: 28rpx;
+	padding-right: 28rpx;
+	background-color: rgba(255, 255, 255, 0.88);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.18);
+	border-radius: 24rpx;
+}
+
+.control-header {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 8rpx;
+}
+
+.weight-label {
+	flex-direction: row;
+	align-items: center;
+}
+
+.weight-badge {
+	padding-top: 4rpx;
+	padding-bottom: 4rpx;
+	padding-left: 12rpx;
+	padding-right: 12rpx;
+	margin-right: 8rpx;
+	background-color: #333333;
+	border-radius: 6rpx;
+}
+
+.weight-badge-text {
+	font-size: 20rpx;
+	font-weight: 600;
+	color: #FFFFFF;
+}
+
+.weight-text {
+	font-size: 24rpx;
+	font-weight: 500;
+	color: #333333;
+}
+
+.weight-value {
+	font-size: 36rpx;
+	font-weight: bold;
+	color: #333333;
+}
+
+.switch-btn {
+	width: 98rpx;
+	height: 98rpx;
+	align-self: center;
+	margin-bottom: 48rpx;
+	align-items: center;
+	justify-content: center;
+	border-radius: 49rpx;
+}
+
+.switch-icon {
+	width: 68rpx;
+	height: 68rpx;
+}
+
+.slider-row {
+	flex-direction: row;
+	align-items: center;
+}
+
+.power-slider-container {
+	flex: 1;
+	height: 48rpx;
+	margin-left: 16rpx;
+	margin-right: 16rpx;
+}
+
+.adjust-btn {
+	width: 44rpx;
+	height: 44rpx;
+	align-items: center;
+	justify-content: center;
+	border-radius: 22rpx;
+}
+
+.adjust-btn-text {
+	font-size: 32rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.control-panel-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 500;
+}
+
+.control-panel-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	background-color: rgba(0, 0, 0, 0.52);
+}
+
+.control-panel-content {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 2;
+	align-items: center;
+	justify-content: center;
+}
+
+.control-buttons {
+	width: 630rpx;
+	flex-direction: row;
+	align-items: flex-end;
+	justify-content: space-between;
+}
+
+.control-btn {
+	align-items: center;
+}
+
+.control-btn-side {
+	width: 160rpx;
+}
+
+.control-btn-center {
+	width: 180rpx;
+}
+
+.control-btn-icon-side {
+	width: 90rpx;
+	height: 90rpx;
+}
+
+.control-btn-icon-center {
+	width: 160rpx;
+	height: 160rpx;
+}
+
+.control-btn-text {
+	margin-top: 12rpx;
+	font-size: 22rpx;
+	color: #FFFFFF;
+}
+
+.exit-btn {
+	width: 260rpx;
+	height: 96rpx;
+	margin-top: 180rpx;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(255, 255, 255, 0.96);
+	border-radius: 48rpx;
+}
+
+.exit-btn-text {
+	font-size: 36rpx;
+	font-weight: 600;
+	color: #333333;
+}
+</style>

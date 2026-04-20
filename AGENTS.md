@@ -39,6 +39,17 @@ On Windows PowerShell, treat the default decoding behavior as unsafe for UTF-8 f
 
 If a file already contains garbled Chinese, do not continue editing those broken strings blindly. First confirm the intended text, then repair or replace it in valid UTF-8 before making further content changes.
 
+## Patch Application Reliability
+Before applying a patch, re-read the exact target block from disk and confirm the current context still matches. Do not rely on stale output from an earlier read when the file may have changed.
+
+Keep patches as small as practical. Change one logical block at a time, and do not mix behavior edits with unrelated whitespace, line-ending, indentation, quote-style, or comment churn.
+
+When editing UTF-8 files that contain Chinese text, keep the read path explicitly UTF-8 before preparing the patch, and avoid incidental encoding or line-ending normalization as part of the same edit.
+
+If a target file already has uncommitted changes, treat the on-disk content as the source of truth and patch around it instead of assuming the previous state.
+
+If a patch fails to apply, re-read the file, compare the live text with the expected context, and retry with a narrower patch. After repeated failure, stop blind retrying and explain the mismatch before continuing.
+
 ## nvue / Android Rules
 Treat `nvue` pages on Android as a separate rendering environment from standard `.vue` pages. Do not assume WebView behavior applies to native rendering, especially for `video`, overlays, `z-index`, fixed/absolute positioning, and gesture handling.
 

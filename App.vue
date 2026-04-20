@@ -1,8 +1,13 @@
 <script>
 import serialService from '@/utils/serialService.js'
+import { SERIAL_DEVICE_PATH, SERIAL_BAUD_RATE } from '@/utils/serialConfig.js'
 
 // ========== 调试开关 ==========
 const DEBUG_MODE = false  // true: 禁用串口连接，false: 启用串口连接
+const APP_SERIAL_CONNECT_CONFIG = {
+  path: SERIAL_DEVICE_PATH,
+  baudRate: SERIAL_BAUD_RATE
+}
 
 export default {
   onLaunch() {
@@ -28,10 +33,7 @@ export default {
     async initSerialConnection() {
       console.log('[App] 正在初始化串口连接...')
       try {
-        const result = await serialService.connect({
-          path: '/dev/ttyS9',
-          baudRate: 115200
-        })
+        const result = await serialService.connect(APP_SERIAL_CONNECT_CONFIG)
         console.log('[App] 串口连接成功:', result)
       } catch (err) {
         console.error('[App] 串口连接失败:', err)

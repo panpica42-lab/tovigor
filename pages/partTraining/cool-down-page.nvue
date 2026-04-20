@@ -1,0 +1,756 @@
+<!--
+ * 练后拉伸页面（nvue）
+ * 功能：训练结束后的拉伸指导，展示动态进度、AI 教练建议与完成弹窗
+ *
+ * nvue 说明：
+ *   - 背景切为与正式训练同源的占位视频
+ *   - 训练完成弹窗改为页内原生实现，避免复用普通 vue 弹窗
+ *   - 进度、控制面板、教练弹窗与视频统一在页面内协调
+ -->
+<template>
+	<view class="cool-down-page" :style="containerStyle">
+		<video
+			id="coolDownBackgroundVideo"
+			class="background-video"
+			:style="fullScreenStyle"
+			:src="backgroundVideoSrc"
+			loop
+			muted
+			autoplay
+			:controls="false"
+			:show-center-play-btn="false"
+			:show-play-btn="false"
+			:enable-progress-gesture="false"
+			object-fit="fill"
+			@loadedmetadata="onBackgroundVideoLoaded"
+			@ended="onBackgroundVideoEnded"
+		></video>
+		<view class="background-tap-layer" :style="fullScreenStyle" @tap="showControlPanel"></view>
+
+		<view v-if="isControlPanelVisible" class="control-panel-overlay" :style="fullScreenStyle">
+			<view class="control-panel-mask" :style="fullScreenStyle" @click="hideControlPanel"></view>
+			<view class="control-panel-content" :style="fullScreenStyle">
+				<view class="control-buttons">
+					<view class="control-btn control-btn-side" @click="handlePrevStep">
+						<image
+							class="control-btn-icon control-btn-icon-side"
+							src="/static/icons/general/btn_last_step.svg"
+							mode="aspectFit"
+						></image>
+						<text class="control-btn-text">正式训练</text>
+					</view>
+
+					<view class="control-btn control-btn-center" @click="handleContinue">
+						<image
+							class="control-btn-icon control-btn-icon-center"
+							src="/static/icons/general/btn_playing_white.svg"
+							mode="aspectFit"
+						></image>
+					</view>
+
+					<view class="control-btn control-btn-side" @click="handleNextStep">
+						<image
+							class="control-btn-icon control-btn-icon-side"
+							src="/static/icons/general/btn_next_step.svg"
+							mode="aspectFit"
+						></image>
+						<text class="control-btn-text">训练完成</text>
+					</view>
+				</view>
+
+				<view class="exit-btn" @click="handleExitTraining">
+					<text class="exit-btn-text">退出训练</text>
+				</view>
+			</view>
+		</view>
+
+		<CommonBackButton
+			class="back-btn-position"
+			:useDefault="false"
+			@click="handleBack"
+		></CommonBackButton>
+
+		<view class="header-title">
+			<text class="title-text">练后拉伸</text>
+		</view>
+
+		<view class="progress-section">
+			<StepBar :totalSteps="12" :currentStep="currentStep"></StepBar>
+		</view>
+
+		<view class="coach-dialog-section">
+			<CoachBubbleBox
+				:text="currentStretchTip"
+				bubble-width="400rpx"
+				@modal-open="handleCoachModalOpen"
+				@modal-close="handleCoachModalClose"
+				@coach-changed="handleCoachChanged"
+			></CoachBubbleBox>
+		</view>
+
+		<view class="virtual-character-container">
+			<image
+				class="close-btn-svg"
+				src="/static/icons/general/btn_general_close.svg"
+				mode="aspectFit"
+				@click="closeVirtualCharacter"
+			></image>
+			<text class="virtual-title">虚拟形象模拟</text>
+			<image
+				class="virtual-character-image"
+				src="/static/icons/partTrainingActivity/startTraining/virtual-character.png"
+				mode="aspectFit"
+			></image>
+		</view>
+
+		<view v-if="showTestButton" class="test-btn" @click="skipToComplete">
+			<text class="test-btn-text">跳过拉伸</text>
+		</view>
+
+		<view v-if="isFinishModalVisible" class="finish-modal-overlay" :style="fullScreenStyle">
+			<view class="finish-modal-mask" :style="fullScreenStyle" @click="hideFinishModal"></view>
+			<view class="finish-modal-card">
+				<view class="finish-modal-top">
+					<view class="finish-handle-bar"></view>
+					<text class="finish-title">恭喜完成训练</text>
+					<image
+						class="finish-ornament"
+						src="/static/icons/general/ic_ornament_A.png"
+						mode="aspectFit"
+					></image>
+				</view>
+
+				<view class="finish-modal-bottom">
+					<text class="finish-hint-top">使用微信扫一扫</text>
+					<image
+						class="finish-qr-code"
+						src="/static/icons/general/QR_code_placeholder.png"
+						mode="aspectFit"
+					></image>
+					<text class="finish-hint-bottom">扫描二维码登录小程序查询训练报告总结</text>
+
+					<view class="finish-confirm-btn" @click="handleFinishConfirm">
+						<text class="finish-confirm-text">返回训练列表</text>
+					</view>
+				</view>
+
+				<view class="finish-close-btn" @click="hideFinishModal">
+					<image
+						class="finish-close-icon"
+						src="/static/icons/general/btn_general_close.svg"
+						mode="aspectFit"
+					></image>
+				</view>
+			</view>
+		</view>
+	</view>
+</template>
+
+<script>
+import CommonBackButton from '@/components/nvue-ui-box/common-back-button.vue'
+import StepBar from '@/components/nvue-ui-box/step-bar.vue'
+import CoachBubbleBox from '@/components/nvue-ui-box/coach-bubble-box.vue'
+
+const STEP_INTERVAL_MS = 30000
+const BACKGROUND_VIDEO_SRC = '/static/icons/general/video-placeholder-2.mp4'
+const STRETCH_TIPS = [
+	'上半身保持竖直，尽量不要耸肩',
+	'慢慢放松肌肉，深呼吸',
+	'保持拉伸姿势 15-30 秒',
+	'感受肌肉的舒展，不要过度用力',
+	'左右两侧均匀拉伸',
+	'拉伸完成，辛苦了！'
+]
+
+export default {
+	components: {
+		CommonBackButton,
+		StepBar,
+		CoachBubbleBox
+	},
+
+	data() {
+		return {
+			screenWidth: 0,
+			screenHeight: 0,
+			currentStep: 1,
+			showTestButton: true,
+			isControlPanelVisible: false,
+			isCoachModalVisible: false,
+			isFinishModalVisible: false,
+			progressTimer: null,
+			backgroundVideoCtx: null,
+			canInitBackgroundVideoCtx: false,
+			pendingBackgroundVideoPlay: false,
+			allowBackgroundVideoPlayback: false,
+			backgroundVideoSrc: BACKGROUND_VIDEO_SRC
+		}
+	},
+
+	computed: {
+		containerStyle() {
+			return {
+				width: this.screenWidth + 'px',
+				height: this.screenHeight + 'px'
+			}
+		},
+
+		fullScreenStyle() {
+			return {
+				width: this.screenWidth + 'px',
+				height: this.screenHeight + 'px'
+			}
+		},
+
+		currentStretchTip() {
+			const stageIndex = Math.ceil(this.currentStep / 2) - 1
+			return STRETCH_TIPS[stageIndex] || STRETCH_TIPS[0]
+		}
+	},
+
+	onLoad() {
+		const sys = uni.getSystemInfoSync()
+		this.screenWidth = sys.windowWidth
+		this.screenHeight = sys.windowHeight
+	},
+
+	onReady() {
+		setTimeout(() => {
+			this.canInitBackgroundVideoCtx = true
+			this.flushPendingBackgroundVideoPlay()
+		}, 80)
+	},
+
+	onShow() {
+		this.resetProgress()
+		this.isFinishModalVisible = false
+		this.allowBackgroundVideoPlayback = true
+		this.requestPlayBackgroundVideo()
+		this.resumeProgressIfReady()
+	},
+
+	onHide() {
+		this.allowBackgroundVideoPlayback = false
+		this.pendingBackgroundVideoPlay = false
+		this.clearProgressTimer()
+		this.pauseBackgroundVideo()
+	},
+
+	onBackPress(options) {
+		if (options && options.from === 'navigateBack') {
+			return false
+		}
+		this.handleBack()
+		return true
+	},
+
+	beforeDestroy() {
+		this.allowBackgroundVideoPlayback = false
+		this.pendingBackgroundVideoPlay = false
+		this.clearProgressTimer()
+		this.pauseBackgroundVideo()
+	},
+
+	methods: {
+		ensureBackgroundVideoCtx() {
+			if (!this.canInitBackgroundVideoCtx) {
+				return null
+			}
+			if (!this.backgroundVideoCtx) {
+				try {
+					this.backgroundVideoCtx = uni.createVideoContext('coolDownBackgroundVideo', this)
+				} catch (error) {
+					console.warn('[cool-down-page] createVideoContext failed:', error)
+					return null
+				}
+			}
+			return this.backgroundVideoCtx
+		},
+
+		requestPlayBackgroundVideo() {
+			if (!this.allowBackgroundVideoPlayback) {
+				this.pendingBackgroundVideoPlay = false
+				return
+			}
+			const ctx = this.ensureBackgroundVideoCtx()
+			if (!ctx) {
+				this.pendingBackgroundVideoPlay = true
+				return
+			}
+			this.pendingBackgroundVideoPlay = false
+			this.playBackgroundVideo()
+		},
+
+		flushPendingBackgroundVideoPlay() {
+			if (!this.pendingBackgroundVideoPlay) return
+			this.requestPlayBackgroundVideo()
+		},
+
+		playBackgroundVideo() {
+			const ctx = this.ensureBackgroundVideoCtx()
+			if (!ctx) return
+			try {
+				ctx.play()
+			} catch (error) {
+				console.warn('[cool-down-page] play background video failed:', error)
+			}
+		},
+
+		pauseBackgroundVideo() {
+			if (!this.backgroundVideoCtx) return
+			try {
+				this.backgroundVideoCtx.pause()
+			} catch (error) {
+				console.warn('[cool-down-page] pause background video failed:', error)
+			}
+		},
+
+		onBackgroundVideoLoaded() {
+			this.requestPlayBackgroundVideo()
+		},
+
+		onBackgroundVideoEnded() {
+			this.playBackgroundVideo()
+		},
+
+		startProgressTimer() {
+			this.clearProgressTimer()
+			if (this.isControlPanelVisible || this.isCoachModalVisible || this.isFinishModalVisible) return
+			this.progressTimer = setInterval(() => {
+				if (this.currentStep < 12) {
+					this.currentStep += 1
+					return
+				}
+				this.clearProgressTimer()
+				this.navigateToComplete()
+			}, STEP_INTERVAL_MS)
+		},
+
+		clearProgressTimer() {
+			if (this.progressTimer) {
+				clearInterval(this.progressTimer)
+				this.progressTimer = null
+			}
+		},
+
+		resetProgress() {
+			this.currentStep = 1
+		},
+
+		resumeProgressIfReady() {
+			if (this.isControlPanelVisible || this.isCoachModalVisible || this.isFinishModalVisible) return
+			this.startProgressTimer()
+		},
+
+		handleCoachModalOpen() {
+			this.isCoachModalVisible = true
+			this.clearProgressTimer()
+		},
+
+		handleCoachModalClose() {
+			this.isCoachModalVisible = false
+			this.resumeProgressIfReady()
+		},
+
+		handleCoachChanged(coachData) {
+			uni.showToast({
+				title: '已切换为' + coachData.label,
+				icon: 'success'
+			})
+		},
+
+		showControlPanel() {
+			this.isControlPanelVisible = true
+			this.clearProgressTimer()
+		},
+
+		hideControlPanel() {
+			this.isControlPanelVisible = false
+			this.resumeProgressIfReady()
+		},
+
+		handleContinue() {
+			this.hideControlPanel()
+		},
+
+		handlePrevStep() {
+			this.isControlPanelVisible = false
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.clearProgressTimer()
+			uni.navigateBack({
+				delta: 1
+			})
+		},
+
+		handleNextStep() {
+			this.isControlPanelVisible = false
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.navigateToComplete()
+		},
+
+		handleExitTraining() {
+			this.isControlPanelVisible = false
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.clearProgressTimer()
+			uni.navigateBack({
+				delta: 4
+			})
+		},
+
+		navigateToComplete() {
+			this.clearProgressTimer()
+			this.isFinishModalVisible = true
+		},
+
+		hideFinishModal() {
+			this.isFinishModalVisible = false
+		},
+
+		handleFinishConfirm() {
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.isFinishModalVisible = false
+			uni.reLaunch({
+				url: '/pages/partTraining/part-training'
+			})
+		},
+
+		skipToComplete() {
+			this.clearProgressTimer()
+			this.navigateToComplete()
+		},
+
+		handleBack() {
+			if (this.isFinishModalVisible) {
+				this.hideFinishModal()
+				return
+			}
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.clearProgressTimer()
+			uni.navigateBack()
+		},
+
+		closeVirtualCharacter() {
+			uni.showToast({
+				title: '功能开发中',
+				icon: 'none'
+			})
+		}
+	}
+}
+</script>
+
+<style>
+.cool-down-page {
+	position: relative;
+	background-color: #000000;
+}
+
+.background-video {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 0;
+}
+
+.background-tap-layer {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 1;
+	background-color: rgba(0, 0, 0, 0.001);
+}
+
+.back-btn-position {
+	position: absolute;
+	left: 24rpx;
+	top: 24rpx;
+	z-index: 100;
+}
+
+.header-title {
+	position: absolute;
+	top: 24rpx;
+	left: 0;
+	right: 0;
+	z-index: 90;
+	height: 88rpx;
+	align-items: center;
+	justify-content: center;
+}
+
+.title-text {
+	font-size: 36rpx;
+	font-weight: 700;
+	color: #FFFFFF;
+}
+
+.progress-section {
+	position: absolute;
+	top: 120rpx;
+	left: 24rpx;
+	right: 24rpx;
+	z-index: 90;
+}
+
+.coach-dialog-section {
+	position: absolute;
+	top: 156rpx;
+	left: 24rpx;
+	z-index: 80;
+}
+
+.virtual-character-container {
+	position: absolute;
+	left: 24rpx;
+	bottom: 220rpx;
+	z-index: 70;
+	width: 180rpx;
+	padding-top: 20rpx;
+	padding-bottom: 20rpx;
+	padding-left: 20rpx;
+	padding-right: 20rpx;
+	align-items: center;
+	background-color: rgba(255, 255, 255, 0.72);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.18);
+	border-radius: 16rpx;
+}
+
+.close-btn-svg {
+	position: absolute;
+	top: 8rpx;
+	left: 8rpx;
+	z-index: 10;
+	width: 18rpx;
+	height: 18rpx;
+}
+
+.virtual-title {
+	margin-bottom: 12rpx;
+	font-size: 18rpx;
+	font-weight: 600;
+	color: #333333;
+}
+
+.virtual-character-image {
+	width: 140rpx;
+	height: 140rpx;
+}
+
+.test-btn {
+	position: absolute;
+	top: 180rpx;
+	right: 24rpx;
+	z-index: 200;
+	height: 64rpx;
+	padding-left: 24rpx;
+	padding-right: 24rpx;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(255, 107, 107, 0.96);
+	border-radius: 32rpx;
+}
+
+.test-btn-text {
+	font-size: 24rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.control-panel-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 500;
+}
+
+.control-panel-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	background-color: rgba(0, 0, 0, 0.52);
+}
+
+.control-panel-content {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 2;
+	align-items: center;
+	justify-content: center;
+}
+
+.control-buttons {
+	width: 630rpx;
+	flex-direction: row;
+	align-items: flex-end;
+	justify-content: space-between;
+}
+
+.control-btn {
+	align-items: center;
+}
+
+.control-btn-side {
+	width: 160rpx;
+}
+
+.control-btn-center {
+	width: 180rpx;
+}
+
+.control-btn-icon-side {
+	width: 90rpx;
+	height: 90rpx;
+}
+
+.control-btn-icon-center {
+	width: 160rpx;
+	height: 160rpx;
+}
+
+.control-btn-text {
+	margin-top: 12rpx;
+	font-size: 22rpx;
+	color: #FFFFFF;
+}
+
+.exit-btn {
+	width: 260rpx;
+	height: 96rpx;
+	margin-top: 180rpx;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(255, 255, 255, 0.96);
+	border-radius: 48rpx;
+}
+
+.exit-btn-text {
+	font-size: 36rpx;
+	font-weight: 600;
+	color: #333333;
+}
+
+.finish-modal-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 700;
+	align-items: center;
+	justify-content: center;
+}
+
+.finish-modal-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	background-color: rgba(0, 0, 0, 0.6);
+}
+
+.finish-modal-card {
+	width: 496rpx;
+	background-color: #FFFFFF;
+	border-radius: 32rpx;
+}
+
+.finish-modal-top {
+	height: 320rpx;
+	align-items: center;
+	padding-top: 22rpx;
+	background-color: #FFA200;
+	border-top-left-radius: 32rpx;
+	border-top-right-radius: 32rpx;
+}
+
+.finish-handle-bar {
+	width: 64rpx;
+	height: 8rpx;
+	margin-bottom: 26rpx;
+	background-color: rgba(255, 255, 255, 0.6);
+	border-radius: 4rpx;
+}
+
+.finish-title {
+	font-size: 38rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+	margin-bottom: 20rpx;
+}
+
+.finish-ornament {
+	width: 208rpx;
+	height: 208rpx;
+}
+
+.finish-modal-bottom {
+	padding-top: 28rpx;
+	padding-bottom: 32rpx;
+	padding-left: 38rpx;
+	padding-right: 38rpx;
+	align-items: center;
+	border-bottom-left-radius: 32rpx;
+	border-bottom-right-radius: 32rpx;
+}
+
+.finish-hint-top {
+	font-size: 24rpx;
+	font-weight: 600;
+	color: #333333;
+	margin-bottom: 16rpx;
+}
+
+.finish-qr-code {
+	width: 160rpx;
+	height: 160rpx;
+	margin-bottom: 16rpx;
+}
+
+.finish-hint-bottom {
+	font-size: 20rpx;
+	line-height: 30rpx;
+	text-align: center;
+	color: #999999;
+	margin-bottom: 28rpx;
+}
+
+.finish-confirm-btn {
+	width: 100%;
+	height: 84rpx;
+	align-items: center;
+	justify-content: center;
+	background-color: #FFA200;
+	border-radius: 42rpx;
+}
+
+.finish-confirm-text {
+	font-size: 28rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.finish-close-btn {
+	position: absolute;
+	right: 20rpx;
+	top: 20rpx;
+	width: 40rpx;
+	height: 40rpx;
+	align-items: center;
+	justify-content: center;
+}
+
+.finish-close-icon {
+	width: 32rpx;
+	height: 32rpx;
+}
+</style>

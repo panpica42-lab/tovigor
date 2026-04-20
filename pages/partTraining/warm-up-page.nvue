@@ -1,0 +1,572 @@
+<!--
+ * 练前热身页面（nvue）
+ * 功能：课程开始前的热身指导，展示动态进度、AI 教练建议与控制面板
+ *
+ * nvue 说明：
+ *   - 背景切为与正式训练同源的占位视频
+ *   - 顶部返回、进度条、教练气泡统一走 nvue 组件
+ *   - 定时器、弹层、视频上下文全部在页面内管理
+ -->
+<template>
+	<view class="warm-up-page" :style="containerStyle">
+		<video
+			id="warmUpBackgroundVideo"
+			class="background-video"
+			:style="fullScreenStyle"
+			:src="backgroundVideoSrc"
+			loop
+			muted
+			autoplay
+			:controls="false"
+			:show-center-play-btn="false"
+			:show-play-btn="false"
+			:enable-progress-gesture="false"
+			object-fit="fill"
+			@loadedmetadata="onBackgroundVideoLoaded"
+			@ended="onBackgroundVideoEnded"
+		></video>
+		<view class="background-tap-layer" :style="fullScreenStyle" @tap="showControlPanel"></view>
+
+		<view v-if="isControlPanelVisible" class="control-panel-overlay" :style="fullScreenStyle">
+			<view class="control-panel-mask" :style="fullScreenStyle" @click="hideControlPanel"></view>
+			<view class="control-panel-content" :style="fullScreenStyle">
+				<view class="control-buttons">
+					<view class="control-btn-placeholder"></view>
+
+					<view class="control-btn control-btn-center" @click="handleContinue">
+						<image
+							class="control-btn-icon control-btn-icon-center"
+							src="/static/icons/general/btn_playing_white.svg"
+							mode="aspectFit"
+						></image>
+					</view>
+
+					<view class="control-btn control-btn-side" @click="handleNextStep">
+						<image
+							class="control-btn-icon control-btn-icon-side"
+							src="/static/icons/general/btn_next_step.svg"
+							mode="aspectFit"
+						></image>
+						<text class="control-btn-text">下一环节</text>
+					</view>
+				</view>
+
+				<view class="exit-btn" @click="handleExitTraining">
+					<text class="exit-btn-text">退出训练</text>
+				</view>
+			</view>
+		</view>
+
+		<CommonBackButton
+			class="back-btn-position"
+			:useDefault="false"
+			@click="handleBack"
+		></CommonBackButton>
+
+		<view class="header-title">
+			<text class="title-text">练前热身</text>
+		</view>
+
+		<view class="progress-section">
+			<StepBar :totalSteps="12" :currentStep="currentStep"></StepBar>
+		</view>
+
+		<view class="coach-dialog-section">
+			<CoachBubbleBox
+				:text="currentWarmupTip"
+				bubble-width="400rpx"
+				@modal-open="handleCoachModalOpen"
+				@modal-close="handleCoachModalClose"
+				@coach-changed="handleCoachChanged"
+			></CoachBubbleBox>
+		</view>
+
+		<view class="virtual-character-container">
+			<image
+				class="close-btn-svg"
+				src="/static/icons/general/btn_general_close.svg"
+				mode="aspectFit"
+				@click="closeVirtualCharacter"
+			></image>
+			<text class="virtual-title">虚拟形象模拟</text>
+			<image
+				class="virtual-character-image"
+				src="/static/icons/partTrainingActivity/startTraining/virtual-character.png"
+				mode="aspectFit"
+			></image>
+		</view>
+
+		<view v-if="showTestButton" class="test-btn" @click="skipToNextPage">
+			<text class="test-btn-text">跳过热身</text>
+		</view>
+	</view>
+</template>
+
+<script>
+import CommonBackButton from '@/components/nvue-ui-box/common-back-button.vue'
+import StepBar from '@/components/nvue-ui-box/step-bar.vue'
+import CoachBubbleBox from '@/components/nvue-ui-box/coach-bubble-box.vue'
+
+const STEP_INTERVAL_MS = 30000
+const BACKGROUND_VIDEO_SRC = '/static/icons/general/video-placeholder-2.mp4'
+const WARMUP_TIPS = [
+	'1. 上半身保持竖直，膝盖不要弯曲',
+	'2. 双手自然下垂，放松肩部肌肉',
+	'3. 缓慢转动颈部，活动颈椎关节',
+	'4. 深呼吸，吸气时腹部膨胀，呼气时收紧',
+	'5. 轻轻扭动腰部，左右各转动 3-5 次',
+	'6. 准备完成，即将开始正式训练！'
+]
+
+export default {
+	components: {
+		CommonBackButton,
+		StepBar,
+		CoachBubbleBox
+	},
+
+	data() {
+		return {
+			screenWidth: 0,
+			screenHeight: 0,
+			currentStep: 1,
+			showTestButton: true,
+			isControlPanelVisible: false,
+			isCoachModalVisible: false,
+			progressTimer: null,
+			backgroundVideoCtx: null,
+			canInitBackgroundVideoCtx: false,
+			pendingBackgroundVideoPlay: false,
+			allowBackgroundVideoPlayback: false,
+			backgroundVideoSrc: BACKGROUND_VIDEO_SRC
+		}
+	},
+
+	computed: {
+		containerStyle() {
+			return {
+				width: this.screenWidth + 'px',
+				height: this.screenHeight + 'px'
+			}
+		},
+
+		fullScreenStyle() {
+			return {
+				width: this.screenWidth + 'px',
+				height: this.screenHeight + 'px'
+			}
+		},
+
+		currentWarmupTip() {
+			const stageIndex = Math.ceil(this.currentStep / 2) - 1
+			return WARMUP_TIPS[stageIndex] || WARMUP_TIPS[0]
+		}
+	},
+
+	onLoad() {
+		const sys = uni.getSystemInfoSync()
+		this.screenWidth = sys.windowWidth
+		this.screenHeight = sys.windowHeight
+	},
+
+	onReady() {
+		setTimeout(() => {
+			this.canInitBackgroundVideoCtx = true
+			this.flushPendingBackgroundVideoPlay()
+		}, 80)
+	},
+
+	onShow() {
+		this.resetProgress()
+		this.allowBackgroundVideoPlayback = true
+		this.requestPlayBackgroundVideo()
+		this.resumeProgressIfReady()
+	},
+
+	onHide() {
+		this.allowBackgroundVideoPlayback = false
+		this.pendingBackgroundVideoPlay = false
+		this.clearProgressTimer()
+		this.pauseBackgroundVideo()
+	},
+
+	onBackPress(options) {
+		if (options && options.from === 'navigateBack') {
+			return false
+		}
+		this.handleBack()
+		return true
+	},
+
+	beforeDestroy() {
+		this.allowBackgroundVideoPlayback = false
+		this.pendingBackgroundVideoPlay = false
+		this.clearProgressTimer()
+		this.pauseBackgroundVideo()
+	},
+
+	methods: {
+		ensureBackgroundVideoCtx() {
+			if (!this.canInitBackgroundVideoCtx) {
+				return null
+			}
+			if (!this.backgroundVideoCtx) {
+				try {
+					this.backgroundVideoCtx = uni.createVideoContext('warmUpBackgroundVideo', this)
+				} catch (error) {
+					console.warn('[warm-up-page] createVideoContext failed:', error)
+					return null
+				}
+			}
+			return this.backgroundVideoCtx
+		},
+
+		requestPlayBackgroundVideo() {
+			if (!this.allowBackgroundVideoPlayback) {
+				this.pendingBackgroundVideoPlay = false
+				return
+			}
+			const ctx = this.ensureBackgroundVideoCtx()
+			if (!ctx) {
+				this.pendingBackgroundVideoPlay = true
+				return
+			}
+			this.pendingBackgroundVideoPlay = false
+			this.playBackgroundVideo()
+		},
+
+		flushPendingBackgroundVideoPlay() {
+			if (!this.pendingBackgroundVideoPlay) return
+			this.requestPlayBackgroundVideo()
+		},
+
+		playBackgroundVideo() {
+			const ctx = this.ensureBackgroundVideoCtx()
+			if (!ctx) return
+			try {
+				ctx.play()
+			} catch (error) {
+				console.warn('[warm-up-page] play background video failed:', error)
+			}
+		},
+
+		pauseBackgroundVideo() {
+			if (!this.backgroundVideoCtx) return
+			try {
+				this.backgroundVideoCtx.pause()
+			} catch (error) {
+				console.warn('[warm-up-page] pause background video failed:', error)
+			}
+		},
+
+		onBackgroundVideoLoaded() {
+			this.requestPlayBackgroundVideo()
+		},
+
+		onBackgroundVideoEnded() {
+			this.playBackgroundVideo()
+		},
+
+		startProgressTimer() {
+			this.clearProgressTimer()
+			if (this.isControlPanelVisible || this.isCoachModalVisible) return
+			this.progressTimer = setInterval(() => {
+				if (this.currentStep < 12) {
+					this.currentStep += 1
+					return
+				}
+				this.clearProgressTimer()
+				this.navigateToNextPage()
+			}, STEP_INTERVAL_MS)
+		},
+
+		clearProgressTimer() {
+			if (this.progressTimer) {
+				clearInterval(this.progressTimer)
+				this.progressTimer = null
+			}
+		},
+
+		resetProgress() {
+			this.currentStep = 1
+		},
+
+		resumeProgressIfReady() {
+			if (this.isControlPanelVisible || this.isCoachModalVisible) return
+			this.startProgressTimer()
+		},
+
+		handleCoachModalOpen() {
+			this.isCoachModalVisible = true
+			this.clearProgressTimer()
+		},
+
+		handleCoachModalClose() {
+			this.isCoachModalVisible = false
+			this.resumeProgressIfReady()
+		},
+
+		handleCoachChanged(coachData) {
+			uni.showToast({
+				title: '已切换为' + coachData.label,
+				icon: 'success'
+			})
+		},
+
+		showControlPanel() {
+			this.isControlPanelVisible = true
+			this.clearProgressTimer()
+		},
+
+		hideControlPanel() {
+			this.isControlPanelVisible = false
+			this.resumeProgressIfReady()
+		},
+
+		handleContinue() {
+			this.hideControlPanel()
+		},
+
+		navigateToNextPage() {
+			uni.navigateTo({
+				url: '/pages/partTraining/adjust-equipment'
+			})
+		},
+
+		skipToNextPage() {
+			this.clearProgressTimer()
+			this.navigateToNextPage()
+		},
+
+		handleNextStep() {
+			this.isControlPanelVisible = false
+			this.clearProgressTimer()
+			this.navigateToNextPage()
+		},
+
+		handleExitTraining() {
+			this.isControlPanelVisible = false
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.clearProgressTimer()
+			uni.navigateBack({
+				delta: 2
+			})
+		},
+
+		handleBack() {
+			this.allowBackgroundVideoPlayback = false
+			this.pendingBackgroundVideoPlay = false
+			this.pauseBackgroundVideo()
+			this.clearProgressTimer()
+			uni.navigateBack()
+		},
+
+		closeVirtualCharacter() {
+			uni.showToast({
+				title: '功能开发中',
+				icon: 'none'
+			})
+		}
+	}
+}
+</script>
+
+<style>
+.warm-up-page {
+	position: relative;
+	background-color: #000000;
+}
+
+.background-video {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 0;
+}
+
+.background-tap-layer {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 1;
+	background-color: rgba(0, 0, 0, 0.001);
+}
+
+.back-btn-position {
+	position: absolute;
+	left: 24rpx;
+	top: 24rpx;
+	z-index: 100;
+}
+
+.header-title {
+	position: absolute;
+	top: 24rpx;
+	left: 0;
+	right: 0;
+	z-index: 90;
+	height: 88rpx;
+	align-items: center;
+	justify-content: center;
+}
+
+.title-text {
+	font-size: 36rpx;
+	font-weight: 700;
+	color: #FFFFFF;
+}
+
+.progress-section {
+	position: absolute;
+	top: 120rpx;
+	left: 24rpx;
+	right: 24rpx;
+	z-index: 90;
+}
+
+.coach-dialog-section {
+	position: absolute;
+	top: 156rpx;
+	left: 24rpx;
+	z-index: 80;
+}
+
+.virtual-character-container {
+	position: absolute;
+	left: 24rpx;
+	bottom: 220rpx;
+	z-index: 70;
+	width: 180rpx;
+	padding-top: 20rpx;
+	padding-bottom: 20rpx;
+	padding-left: 20rpx;
+	padding-right: 20rpx;
+	align-items: center;
+	background-color: rgba(255, 255, 255, 0.72);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.18);
+	border-radius: 16rpx;
+}
+
+.close-btn-svg {
+	position: absolute;
+	top: 8rpx;
+	left: 8rpx;
+	z-index: 10;
+	width: 18rpx;
+	height: 18rpx;
+}
+
+.virtual-title {
+	margin-bottom: 12rpx;
+	font-size: 18rpx;
+	font-weight: 600;
+	color: #333333;
+}
+
+.virtual-character-image {
+	width: 140rpx;
+	height: 140rpx;
+}
+
+.test-btn {
+	position: absolute;
+	top: 180rpx;
+	right: 24rpx;
+	z-index: 200;
+	height: 64rpx;
+	padding-left: 24rpx;
+	padding-right: 24rpx;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(255, 107, 107, 0.96);
+	border-radius: 32rpx;
+}
+
+.test-btn-text {
+	font-size: 24rpx;
+	font-weight: bold;
+	color: #FFFFFF;
+}
+
+.control-panel-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 500;
+}
+
+.control-panel-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	background-color: rgba(0, 0, 0, 0.52);
+}
+
+.control-panel-content {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 2;
+	align-items: center;
+	justify-content: center;
+}
+
+.control-buttons {
+	width: 560rpx;
+	flex-direction: row;
+	align-items: flex-end;
+	justify-content: space-between;
+}
+
+.control-btn-placeholder {
+	width: 160rpx;
+}
+
+.control-btn {
+	align-items: center;
+}
+
+.control-btn-side {
+	width: 160rpx;
+}
+
+.control-btn-center {
+	width: 180rpx;
+}
+
+.control-btn-icon-side {
+	width: 90rpx;
+	height: 90rpx;
+}
+
+.control-btn-icon-center {
+	width: 160rpx;
+	height: 160rpx;
+}
+
+.control-btn-text {
+	margin-top: 12rpx;
+	font-size: 22rpx;
+	color: #FFFFFF;
+}
+
+.exit-btn {
+	width: 260rpx;
+	height: 96rpx;
+	margin-top: 180rpx;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(255, 255, 255, 0.96);
+	border-radius: 48rpx;
+}
+
+.exit-btn-text {
+	font-size: 36rpx;
+	font-weight: 600;
+	color: #333333;
+}
+</style>

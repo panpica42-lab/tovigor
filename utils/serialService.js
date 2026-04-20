@@ -29,14 +29,15 @@ import {
   listDevices,
   getVersion
 } from '@/uni_modules/wzl-serialbridge'
+import { SERIAL_DEVICE_PATH, SERIAL_BAUD_RATE } from '@/utils/serialConfig.js'
 
 // ============================================================================
 // 运行时状态
 // ============================================================================
 
 const DEFAULT_CONFIG = {
-  path: '/dev/ttyS3',
-  baudRate: 115200,
+  path: SERIAL_DEVICE_PATH,
+  baudRate: SERIAL_BAUD_RATE,
   dataBits: 8,
   stopBits: 1,
   parity: 'none'
@@ -579,7 +580,7 @@ function emit(event, data) {
 /**
  * 连接串口
  * @param {object} options - 连接选项
- * @param {string} options.path - 设备路径，默认 '/dev/ttyS3'
+ * @param {string} options.path - 设备路径，默认取 utils/serialConfig.js 中的 SERIAL_DEVICE_PATH
  * @param {number} options.baudRate - 波特率，默认 115200
  * @param {number} options.dataBits - 数据位，默认 8
  * @param {number} options.stopBits - 停止位，默认 1

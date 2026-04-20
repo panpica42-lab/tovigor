@@ -27,13 +27,14 @@
  */
 
 import serialService, { FORCE_MODE } from '@/utils/serialService.js'
+import { SERIAL_DEVICE_PATH, SERIAL_BAUD_RATE } from '@/utils/serialConfig.js'
 
 // ============================================================================
 // 串口配置（统一管理，修改一处即可）
 // ============================================================================
 const SERIAL_CONFIG = {
-  path: '/dev/ttyS9',
-  baudRate: 115200
+  path: SERIAL_DEVICE_PATH,
+  baudRate: SERIAL_BAUD_RATE
 }
 
 export default {

@@ -62,16 +62,12 @@
 		
 		<!-- AI教练气泡对话框 -->
 		<view class="coach-dialog-section">
-			<BubbleDialogBox
-				:roleLabel="coachRoleLabel"
-				:avatarUrl="coachAvatarUrl"
-				:badgeBackground="coachBadgeBackground"
+			<CoachBubbleBox
 				:text="currentWarmupTip"
-				contentBackground="rgba(255, 255, 255, 0.85)"
-				:showShadow="true"
-				:clickable="true"
-				@coach-click="openCoachModal"
-			/>
+				@modal-open="handleCoachModalOpen"
+				@modal-close="handleCoachModalClose"
+				@coach-changed="handleCoachChanged"
+			></CoachBubbleBox>
 		</view>
 		
 		<!-- 虚拟形象模拟缩略图（左下角） -->
@@ -100,13 +96,6 @@
 			<text class="test-btn-text">跳过热身</text>
 		</view>
 		
-		<!-- AI教练选择弹窗 -->
-		<CoachDetailModal
-			v-model:show="showCoachModal"
-			:coachData="selectedCoach"
-			:switchable="true"
-			@select="handleCoachSelect"
-		/>
 	</view>
 </template>
 
@@ -115,9 +104,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
-import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
-import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
-import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
+import CoachBubbleBox from '@/components/coach-bubble-box.vue'
 
 // ========== 测试开关：设置为 false 关闭测试按钮 ==========
 const SHOW_TEST_BUTTON = ref(true)
@@ -126,30 +113,20 @@ const SHOW_TEST_BUTTON = ref(true)
 // 每段进度的时间间隔（毫秒），可在此修改
 const STEP_INTERVAL_MS = 30000  // 默认 3 秒
 
-// AI教练信息（响应式，从本地存储读取）
-const selectedCoach = ref(null)
-const coachRoleLabel = computed(() => selectedCoach.value?.fullName || 'Vince 艾斯')
-const coachAvatarUrl = computed(() => selectedCoach.value?.avatar || '/static/icons/partTrainingActivity/AI_coach_Vince.png')
-const coachBadgeBackground = computed(() => selectedCoach.value?.badgeBackground || 'linear-gradient(135deg, #4A90E2 0%, #357ABD 100%)')
-
-// 教练选择弹窗状态
-const showCoachModal = ref(false)
-
-// 打开教练选择弹窗
-const openCoachModal = () => {
+// 教练弹窗打开时暂停进度，关闭后恢复，避免用户切换教练时计时继续流逝。
+const handleCoachModalOpen = () => {
 	clearProgressTimer()  // 暂停进度
-	showCoachModal.value = true
 }
 
-// 处理教练选择
-const handleCoachSelect = (coachData) => {
-	setSelectedCoach(coachData.value)
-	selectedCoach.value = coachData
+const handleCoachModalClose = () => {
+	startProgressTimer()
+}
+
+const handleCoachChanged = (coachData) => {
 	uni.showToast({
 		title: `已切换为${coachData.label}`,
 		icon: 'success'
 	})
-	startProgressTimer()  // 恢复进度
 }
 
 // 热身建议列表（6个阶段，每个阶段对应2段进度条）
@@ -174,10 +151,6 @@ const currentWarmupTip = computed(() => {
 
 // ========== 生命周期 ==========
 onMounted(() => {
-	// 读取选中的教练信息
-	selectedCoach.value = getSelectedCoach()
-	console.log('当前选中的教练:', selectedCoach.value)
-	
 	startProgressTimer()
 })
 
