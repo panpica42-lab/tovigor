@@ -83,10 +83,10 @@
 		<!-- 顶部状态区统一放进一行布局，避免 nvue 上气泡文案变长后压住右侧数据看板。 -->
 		<view class="top-status-section">
 			<view class="coach-dialog-section">
-				<CoachBubbleBox
+				<CoachBox
 					:text="coachBubbleText"
 					bubble-width="400rpx"
-				></CoachBubbleBox>
+				></CoachBox>
 			</view>
 
 			<view class="data-panels">
@@ -202,13 +202,13 @@ import CommonBackButton from '@/components/nvue-ui-box/common-back-button.vue'
 import StepBar from '@/components/nvue-ui-box/step-bar.vue'
 import DataPanel from '@/components/nvue-ui-box/data-panel.vue'
 import PowerSlider from '@/components/nvue-ui-box/power-slider.vue'
-import CoachBubbleBox from '@/components/coach-bubble-box.vue'
+import CoachBox from '@/components/coach/coach-box-entry.vue'
 import nvueSerialMixin from '@/utils/nvueSerialMixin.js'
+import { navigateBackOrReLaunch, navigateBackToRoute } from '@/utils/navigation.js'
 
 const SLIDER_MIN = 5
 const SLIDER_MAX = 55
 const WORKING_INTERVAL = 200
-const HIDDEN_DISCONNECT_DELAY = 2200
 const BACKGROUND_VIDEO_SRC = '/static/icons/general/video-placeholder-2.mp4'
 
 export default {
@@ -217,7 +217,7 @@ export default {
 		StepBar,
 		DataPanel,
 		PowerSlider,
-		CoachBubbleBox
+		CoachBox
 	},
 
 	mixins: [nvueSerialMixin],
@@ -240,7 +240,6 @@ export default {
 			dragDisplayValue: 30,
 			isDraggingSlider: false,
 			isControlPanelVisible: false,
-			serialDisconnectTimer: null,
 			backgroundVideoCtx: null,
 			canInitBackgroundVideoCtx: false,
 			pendingBackgroundVideoPlay: false,
@@ -348,10 +347,6 @@ export default {
 
 	onShow() {
 		this.allowBackgroundVideoPlayback = true
-		this.cancelSerialDisconnect()
-		if (!this.serialReady) {
-			this._nvueSerialConnect()
-		}
 		this.requestPlayBackgroundVideo()
 	},
 
@@ -372,7 +367,6 @@ export default {
 	beforeDestroy() {
 		this.allowBackgroundVideoPlayback = false
 		this.pendingBackgroundVideoPlay = false
-		this.cancelSerialDisconnect()
 		this.pauseBackgroundVideo()
 		this.stopPowerOutput()
 	},
@@ -447,24 +441,6 @@ export default {
 			this.isControlPanelVisible = false
 		},
 
-		cancelSerialDisconnect() {
-			if (this.serialDisconnectTimer) {
-				clearTimeout(this.serialDisconnectTimer)
-				this.serialDisconnectTimer = null
-			}
-		},
-
-		// 跳去热身/拉伸后当前页通常还留在栈里，这里延迟断开，避免隐藏页一直占着 nvue 串口上下文。
-		scheduleSerialDisconnect() {
-			this.cancelSerialDisconnect()
-			this.serialDisconnectTimer = setTimeout(() => {
-				this.serialDisconnectTimer = null
-				if (!this.isPowerOn) {
-					this._nvueSerialDisconnect()
-				}
-			}, HIDDEN_DISCONNECT_DELAY)
-		},
-
 		handleContinue() {
 			this.hideControlPanel()
 		},
@@ -475,10 +451,7 @@ export default {
 			this.pendingBackgroundVideoPlay = false
 			this.pauseBackgroundVideo()
 			this.stopPowerOutput()
-			this.scheduleSerialDisconnect()
-			uni.navigateTo({
-				url: '/pages/partTraining/warm-up-page'
-			})
+			navigateBackToRoute('/pages/partTraining/warm-up-page', '/pages/partTraining/part-training')
 		},
 
 		handleNextStep() {
@@ -487,7 +460,6 @@ export default {
 			this.pendingBackgroundVideoPlay = false
 			this.pauseBackgroundVideo()
 			this.stopPowerOutput()
-			this.scheduleSerialDisconnect()
 			uni.navigateTo({
 				url: '/pages/partTraining/cool-down-page'
 			})
@@ -499,9 +471,7 @@ export default {
 			this.pendingBackgroundVideoPlay = false
 			this.pauseBackgroundVideo()
 			this.stopPowerOutput()
-			uni.navigateBack({
-				delta: 3
-			})
+			navigateBackToRoute('/pages/partTraining/part-training')
 		},
 
 		handleBack() {
@@ -509,7 +479,7 @@ export default {
 			this.pendingBackgroundVideoPlay = false
 			this.pauseBackgroundVideo()
 			this.stopPowerOutput()
-			uni.navigateBack()
+			navigateBackOrReLaunch('/pages/partTraining/part-training')
 		},
 
 		// 拖动中只刷新显示值，真正的配重提交统一放在 change 里处理。
@@ -546,7 +516,6 @@ export default {
 				return
 			}
 
-			this.cancelSerialDisconnect()
 			if (!this.serialReady) {
 				uni.showToast({
 					title: '设备连接中',
@@ -564,6 +533,12 @@ export default {
 			this.isPowerOn = false
 			this.isDraggingSlider = false
 			this.$serial.stopForce()
+		},
+
+		_nvueSerialBeforeStopForceOnHide() {
+			this.isControlPanelVisible = false
+			this.isPowerOn = false
+			this.isDraggingSlider = false
 		},
 
 		closeVirtualCharacter() {

@@ -72,13 +72,13 @@
 		</view>
 
 		<view class="coach-dialog-section">
-			<CoachBubbleBox
+			<CoachBox
 				:text="currentWarmupTip"
 				bubble-width="400rpx"
 				@modal-open="handleCoachModalOpen"
 				@modal-close="handleCoachModalClose"
 				@coach-changed="handleCoachChanged"
-			></CoachBubbleBox>
+			></CoachBox>
 		</view>
 
 		<view class="virtual-character-container">
@@ -105,7 +105,8 @@
 <script>
 import CommonBackButton from '@/components/nvue-ui-box/common-back-button.vue'
 import StepBar from '@/components/nvue-ui-box/step-bar.vue'
-import CoachBubbleBox from '@/components/nvue-ui-box/coach-bubble-box.vue'
+import CoachBox from '@/components/coach/coach-box-entry.vue'
+import { navigateBackOrReLaunch, navigateBackToRoute } from '@/utils/navigation.js'
 
 const STEP_INTERVAL_MS = 30000
 const BACKGROUND_VIDEO_SRC = '/static/icons/general/video-placeholder-2.mp4'
@@ -122,7 +123,7 @@ export default {
 	components: {
 		CommonBackButton,
 		StepBar,
-		CoachBubbleBox
+		CoachBox
 	},
 
 	data() {
@@ -350,9 +351,7 @@ export default {
 			this.pendingBackgroundVideoPlay = false
 			this.pauseBackgroundVideo()
 			this.clearProgressTimer()
-			uni.navigateBack({
-				delta: 2
-			})
+			navigateBackToRoute('/pages/partTraining/part-training')
 		},
 
 		handleBack() {
@@ -360,7 +359,7 @@ export default {
 			this.pendingBackgroundVideoPlay = false
 			this.pauseBackgroundVideo()
 			this.clearProgressTimer()
-			uni.navigateBack()
+			navigateBackOrReLaunch('/pages/partTraining/part-training')
 		},
 
 		closeVirtualCharacter() {

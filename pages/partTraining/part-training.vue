@@ -2,7 +2,7 @@
 	<view class="page">
 		<!-- 顶部导航 -->
 		<view class="header">
-			<CommonBackButton class="back-btn-position" />
+			<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
 			<text class="header-title">部位训练</text>
 		</view>
 
@@ -62,6 +62,7 @@ import { ref } from 'vue'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import TrainingFilterSidebar from '@/components/ui-box/training-filter-sidebar.vue'
 import TrainingCourseCard from '@/components/course-list/training-course-card.vue'
+import { navigateBackOrReLaunch } from '@/utils/navigation.js'
 
 const searchKeyword = ref('')
 
@@ -162,6 +163,10 @@ const handleCourseClick = (course) => {
 	uni.navigateTo({
 		url: '/pages/partTraining/part-training-detail-adapter?id=' + course.id
 	})
+}
+
+const handleBack = () => {
+	navigateBackOrReLaunch('/pages/index/index')
 }
 
 const handleCoursePlay = (course) => {

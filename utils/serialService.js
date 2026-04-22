@@ -578,6 +578,16 @@ function emit(event, data) {
 // ============================================================================
 
 /**
+ * 确保串口已连接
+ * 语义上等同于 connect()，但明确表达“可幂等复用已有连接”的用途。
+ * @param {object} options - 连接选项
+ * @returns {Promise}
+ */
+export function ensureConnected(options = {}) {
+  return connect(options)
+}
+
+/**
  * 连接串口
  * @param {object} options - 连接选项
  * @param {string} options.path - 设备路径，默认取 utils/serialConfig.js 中的 SERIAL_DEVICE_PATH
@@ -1490,6 +1500,7 @@ export function cleanup() {
 
 export default {
   // 连接管理
+  ensureConnected,
   connect,
   disconnect,
   

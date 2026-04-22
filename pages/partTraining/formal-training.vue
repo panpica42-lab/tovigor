@@ -67,7 +67,7 @@
 		</view>
 		
 		<!-- 返回按钮（左上角浮层） -->
-		<CommonBackButton class="back-btn-position" />
+		<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
 		
 		<!-- 标题（顶部居中） -->
 		<view class="header-title">
@@ -210,6 +210,7 @@ import StepBar from '@/components/ui-box/step-bar.vue'
 import DataPanel from '@/components/ui-box/data-panel.vue'
 import PowerSlider from '@/components/ui-box/power-slider.vue'
 import serialService, { FORCE_MODE } from '@/utils/serialService.js'
+import { navigateBackOrReLaunch, navigateBackToRoute } from '@/utils/navigation.js'
 
 // ========== 训练数据 ==========
 const currentExerciseName = ref('站姿肩关节环绕')
@@ -263,10 +264,7 @@ const handleContinue = () => {
 
 const handlePrevStep = () => {
 	isControlPanelVisible.value = false
-	// 跳转到练前热身
-	uni.navigateTo({
-		url: '/pages/partTraining/warm-up-page'
-	})
+	navigateBackToRoute('/pages/partTraining/warm-up-page', '/pages/partTraining/part-training')
 }
 
 const handleNextStep = () => {
@@ -279,9 +277,11 @@ const handleNextStep = () => {
 
 const handleExitTraining = () => {
 	isControlPanelVisible.value = false
-	uni.navigateBack({
-		delta: 3  // 返回到课程列表
-	})
+	navigateBackToRoute('/pages/partTraining/part-training')
+}
+
+const handleBack = () => {
+	navigateBackOrReLaunch('/pages/partTraining/part-training')
 }
 
 // ========== 力量控制方法 ==========

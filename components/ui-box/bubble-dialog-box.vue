@@ -7,6 +7,8 @@
  * - 上方小气泡：蓝色胶囊（名字 + 头像）
  * - 下方大气泡：白色对话框（对话内容）
  * - 两个气泡紧密连接，视觉上是一个整体
+ 4.21补充，这只是旧方案的底座，新方案在components\coach
+ 使用统一入口components\coach\coach-box-entry.vue
  -->
 <template>
 	<view class="bubble-dialog">

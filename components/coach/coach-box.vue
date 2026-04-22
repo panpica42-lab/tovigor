@@ -1,149 +1,159 @@
 <!--
- * AI教练气泡对话框（nvue 自治业务组件）
+ * AI 教练气泡组件（shared / 普通 vue 实现）
  *
- * 功能：
- *   1. 展示教练气泡（名字胶囊 + 头像 + 对话文字）
- *   2. 点击胶囊区域弹出教练选择弹窗（内建，不依赖外部弹窗组件）
- *   3. 教练数据通过 coachManager.js 自动读取和持久化
- *
- * 对外 API：
- *   Props:
- *     text         - 气泡文字内容（必传，由页面控制提示语）
- *     bubbleWidth  - 可选，限制对话气泡内容宽度，避免在页面浮层中压住其他组件
- *   Events:
- *     coach-changed(coachData)  - 教练切换后通知页面（可选监听）
- *
- * nvue 兼容说明：
- *   - Options API（不用 <script setup>）
- *   - 无 scoped / scss
- *   - 无 linear-gradient / box-shadow / transition / :active
- *   - padding / border-radius 全部拆写
- *   - image 宽高用内联 style
+ * 目标：
+ *   1. 提供普通 `.vue` 页面使用的 AI 教练气泡
+ *   2. 内建教练选择弹窗与状态持久化
+ *   3. 与 nvue 实现保持一致的对外 API
  -->
 <template>
-	<view class="cb-root">
-
-		<!-- ===== 气泡区域 ===== -->
-		<view class="cb-bubble">
-			<!-- 上方胶囊：教练名字 + 头像，点击打开弹窗 -->
+	<view class="ccb-root" :style="rootStyle">
+		<view class="ccb-bubble" :style="bubbleStyle">
 			<view
-				class="cb-header"
+				class="ccb-header"
 				:style="{ backgroundColor: currentBadgeColor }"
-				@click="openModal"
+				@click="handleHeaderClick"
 			>
-				<text class="cb-header-role">{{ currentCoach.fullName }}</text>
+				<text class="ccb-header-role">{{ currentCoach.fullName }}</text>
 				<image
+					class="ccb-header-avatar"
 					:src="currentCoach.avatar"
 					:style="{ width: '66rpx', height: '66rpx' }"
 				></image>
 			</view>
 
-			<!-- 下方对话气泡 -->
-			<view class="cb-content" :style="contentStyle">
-				<text class="cb-content-text">{{ text }}</text>
+			<view class="ccb-content" :style="contentStyle">
+				<text class="ccb-content-text">{{ text }}</text>
 			</view>
 		</view>
 
-		<!-- ===== 教练选择弹窗（内建） ===== -->
-		<view v-if="modalVisible" class="cb-modal-mask" @click="closeModal">
-			<view class="cb-modal-card" @click.stop="">
+		<view v-if="modalVisible" class="ccb-modal-overlay">
+			<view class="ccb-modal-mask" @click="closeModal"></view>
 
-				<!-- 关闭按钮 -->
-				<text class="cb-modal-close" @click="closeModal">✕</text>
+			<view class="ccb-modal-card">
+				<text class="ccb-modal-close" @click="closeModal">×</text>
+				<text class="ccb-modal-title">AI教练</text>
 
-				<!-- 标题 -->
-				<text class="cb-modal-title">AI教练</text>
-
-				<!-- 切换按钮 -->
-				<view class="cb-switch-row">
+				<view class="ccb-switch-row">
 					<view
 						v-for="coach in allCoaches"
 						:key="coach.value"
-						class="cb-switch-btn"
-						:style="coach.value === previewValue
-							? { backgroundColor: '#00C853', borderColor: '#00C853' }
-							: { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.3)' }"
+						class="ccb-switch-btn"
+						:style="coach.value === previewValue ? activeSwitchStyle : inactiveSwitchStyle"
 						@click="previewCoach(coach.value)"
 					>
-						<text class="cb-switch-text">{{ coach.fullName }}</text>
+						<text class="ccb-switch-text">{{ coach.fullName }}</text>
 					</view>
 				</view>
 
-				<!-- 预览头像 -->
-				<view class="cb-avatar-wrap">
+				<view class="ccb-avatar-wrap">
 					<image
 						:src="previewCoachData.avatar"
 						:style="{ width: '200rpx', height: '200rpx', borderRadius: '100rpx' }"
 					></image>
 				</view>
 
-				<!-- 教练信息 -->
-				<text class="cb-coach-name">{{ previewCoachData.label }}</text>
-				<text class="cb-coach-ename">{{ previewCoachData.englishName }}</text>
-				<text class="cb-coach-intro">{{ previewCoachData.intro }}</text>
+				<text class="ccb-coach-name">{{ previewCoachData.label }}</text>
+				<text class="ccb-coach-ename">{{ previewCoachData.englishName }}</text>
+				<text class="ccb-coach-intro">{{ previewCoachData.intro }}</text>
 
-				<!-- 特长标签 -->
-				<view class="cb-tags-row">
+				<view class="ccb-tags-row">
 					<view
-						v-for="(tag, i) in previewCoachData.tags"
-						:key="i"
-						class="cb-tag"
+						v-for="(tag, index) in previewCoachData.tags"
+						:key="index"
+						class="ccb-tag"
 					>
-						<text class="cb-tag-text">{{ tag }}</text>
+						<text class="ccb-tag-text">{{ tag }}</text>
 					</view>
 				</view>
 
-				<!-- 选择按钮 -->
-				<view class="cb-select-btn" @click="confirmSelect">
-					<text class="cb-select-text">选择{{ previewCoachData.label }}</text>
+				<view class="ccb-select-btn" @click="confirmSelect">
+					<text class="ccb-select-text">选择{{ previewCoachData.label }}</text>
 				</view>
 			</view>
 		</view>
-
 	</view>
 </template>
 
 <script>
 import { getSelectedCoach, setSelectedCoach, getAllCoaches, getCoachByValue } from '@/utils/coachManager.js'
 
+function getFirstColor(backgroundText) {
+	if (!backgroundText) return '#667eea'
+	const colorMatch = backgroundText.match(/(#[0-9A-Fa-f]{3,8}|rgba?\([^)]+\))/)
+	return colorMatch ? colorMatch[0] : '#667eea'
+}
+
 export default {
 	props: {
-		// 气泡文字（页面传入，组件不关心内容来源）
 		text: {
 			type: String,
 			default: ''
 		},
-		// 可选宽度限制，用于浮层较多的页面上控制文案换行范围
 		bubbleWidth: {
 			type: String,
 			default: ''
+		},
+		contentBackground: {
+			type: String,
+			default: 'rgba(255, 255, 255, 0.85)'
+		},
+		clickable: {
+			type: Boolean,
+			default: true
 		}
 	},
 
 	emits: ['coach-changed', 'modal-open', 'modal-close'],
 
 	data() {
-		const coach = getSelectedCoach()
-		const coachesObj = getAllCoaches()
+		const currentCoach = getSelectedCoach()
 		return {
-			currentCoach: coach,
-			allCoaches: Object.values(coachesObj),
+			currentCoach,
+			allCoaches: Object.values(getAllCoaches()),
 			modalVisible: false,
-			previewValue: coach.value
+			previewValue: currentCoach.value,
+			activeSwitchStyle: {
+				backgroundColor: '#00C853',
+				borderColor: '#00C853'
+			},
+			inactiveSwitchStyle: {
+				backgroundColor: 'rgba(255,255,255,0.1)',
+				borderColor: 'rgba(255,255,255,0.3)'
+			}
 		}
 	},
 
 	computed: {
-		// nvue 不支持 linear-gradient，从渐变里提取第一个色值降级为纯色
-		currentBadgeColor() {
-			const bg = this.currentCoach.badgeBackground || ''
-			const match = bg.match(/#[0-9A-Fa-f]{6}/)
-			return match ? match[0] : '#667eea'
+		rootStyle() {
+			if (!this.bubbleWidth) return {}
+			return {
+				width: this.bubbleWidth,
+				minWidth: this.bubbleWidth
+			}
 		},
 
-		// 仅在页面显式传入时限制宽度，默认保持组件原有自适应行为
+		bubbleStyle() {
+			if (!this.bubbleWidth) return {}
+			return {
+				width: '100%',
+				minWidth: '100%'
+			}
+		},
+
+		currentBadgeColor() {
+			return getFirstColor(this.currentCoach.badgeBackground)
+		},
+
 		contentStyle() {
-			return this.bubbleWidth ? { width: this.bubbleWidth } : {}
+			const style = {
+				backgroundColor: this.contentBackground
+			}
+			if (this.bubbleWidth) {
+				style.width = '100%'
+				style.minWidth = '100%'
+			}
+			return style
 		},
 
 		previewCoachData() {
@@ -152,7 +162,17 @@ export default {
 	},
 
 	methods: {
+		syncCurrentCoach() {
+			this.currentCoach = getSelectedCoach()
+		},
+
+		handleHeaderClick() {
+			if (!this.clickable) return
+			this.openModal()
+		},
+
 		openModal() {
+			this.syncCurrentCoach()
 			this.previewValue = this.currentCoach.value
 			this.modalVisible = true
 			this.$emit('modal-open')
@@ -164,14 +184,18 @@ export default {
 			this.$emit('modal-close')
 		},
 
-		previewCoach(val) {
-			this.previewValue = val
+		previewCoach(coachValue) {
+			this.previewValue = coachValue
 		},
 
 		confirmSelect() {
-			setSelectedCoach(this.previewValue)
-			this.currentCoach = getCoachByValue(this.previewValue)
-			this.$emit('coach-changed', this.currentCoach)
+			if (this.previewValue !== this.currentCoach.value) {
+				const saved = setSelectedCoach(this.previewValue)
+				if (saved) {
+					this.currentCoach = getCoachByValue(this.previewValue) || this.currentCoach
+					this.$emit('coach-changed', this.currentCoach)
+				}
+			}
 			this.closeModal()
 		}
 	}
@@ -179,17 +203,19 @@ export default {
 </script>
 
 <style>
-/* ==================== 气泡区域 ==================== */
-.cb-root {
+.ccb-root {
+	display: flex;
 	flex-direction: column;
 }
 
-.cb-bubble {
+.ccb-bubble {
+	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
 }
 
-.cb-header {
+.ccb-header {
+	display: flex;
 	flex-direction: row;
 	align-items: center;
 	padding-top: 4rpx;
@@ -204,15 +230,19 @@ export default {
 	margin-bottom: -2rpx;
 }
 
-.cb-header-role {
+.ccb-header-role {
 	font-size: 24rpx;
 	font-weight: bold;
 	color: #FFFFFF;
 	margin-right: 12rpx;
 }
 
-.cb-content {
-	background-color: rgba(255, 255, 255, 0.85);
+.ccb-header-avatar {
+	width: 66rpx;
+	height: 66rpx;
+}
+
+.ccb-content {
 	padding-top: 16rpx;
 	padding-bottom: 16rpx;
 	padding-left: 20rpx;
@@ -223,26 +253,35 @@ export default {
 	border-bottom-right-radius: 24rpx;
 }
 
-.cb-content-text {
+.ccb-content-text {
+	width: 100%;
 	font-size: 26rpx;
-	color: #333333;
 	line-height: 40rpx;
+	color: #333333;
 }
 
-/* ==================== 弹窗遮罩 ==================== */
-.cb-modal-mask {
+.ccb-modal-overlay {
 	position: fixed;
 	top: 0;
 	left: 0;
 	right: 0;
 	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.6);
+	display: flex;
 	align-items: center;
 	justify-content: center;
+	z-index: 999;
 }
 
-/* ==================== 弹窗卡片 ==================== */
-.cb-modal-card {
+.ccb-modal-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.6);
+}
+
+.ccb-modal-card {
 	width: 560rpx;
 	background-color: #1E3A8A;
 	border-top-left-radius: 32rpx;
@@ -253,35 +292,36 @@ export default {
 	padding-bottom: 32rpx;
 	padding-left: 32rpx;
 	padding-right: 32rpx;
+	display: flex;
 	flex-direction: column;
 	align-items: center;
+	z-index: 1;
 }
 
-/* 关闭按钮 */
-.cb-modal-close {
+.ccb-modal-close {
 	position: absolute;
 	top: 20rpx;
 	left: 20rpx;
-	font-size: 32rpx;
+	font-size: 40rpx;
+	line-height: 40rpx;
 	color: rgba(255, 255, 255, 0.7);
 }
 
-/* 标题 */
-.cb-modal-title {
+.ccb-modal-title {
 	font-size: 36rpx;
 	font-weight: bold;
 	color: #FFFFFF;
 	margin-bottom: 24rpx;
 }
 
-/* ==================== 切换按钮行 ==================== */
-.cb-switch-row {
+.ccb-switch-row {
+	display: flex;
 	flex-direction: row;
 	justify-content: center;
 	margin-bottom: 24rpx;
 }
 
-.cb-switch-btn {
+.ccb-switch-btn {
 	padding-top: 12rpx;
 	padding-bottom: 12rpx;
 	padding-left: 32rpx;
@@ -296,34 +336,33 @@ export default {
 	margin-right: 12rpx;
 }
 
-.cb-switch-text {
+.ccb-switch-text {
 	font-size: 24rpx;
 	font-weight: bold;
 	color: #FFFFFF;
 }
 
-/* ==================== 头像 ==================== */
-.cb-avatar-wrap {
+.ccb-avatar-wrap {
+	display: flex;
 	align-items: center;
 	justify-content: center;
 	margin-bottom: 32rpx;
 }
 
-/* ==================== 教练信息 ==================== */
-.cb-coach-name {
+.ccb-coach-name {
 	font-size: 40rpx;
 	font-weight: bold;
 	color: #FFFFFF;
 	margin-bottom: 8rpx;
 }
 
-.cb-coach-ename {
+.ccb-coach-ename {
 	font-size: 24rpx;
 	color: rgba(255, 255, 255, 0.7);
 	margin-bottom: 24rpx;
 }
 
-.cb-coach-intro {
+.ccb-coach-intro {
 	font-size: 26rpx;
 	color: rgba(255, 255, 255, 0.85);
 	text-align: center;
@@ -333,15 +372,15 @@ export default {
 	padding-right: 16rpx;
 }
 
-/* ==================== 特长标签 ==================== */
-.cb-tags-row {
+.ccb-tags-row {
+	display: flex;
 	flex-direction: row;
 	flex-wrap: wrap;
 	justify-content: center;
 	margin-bottom: 28rpx;
 }
 
-.cb-tag {
+.ccb-tag {
 	padding-top: 8rpx;
 	padding-bottom: 8rpx;
 	padding-left: 20rpx;
@@ -359,14 +398,13 @@ export default {
 	margin-bottom: 12rpx;
 }
 
-.cb-tag-text {
+.ccb-tag-text {
 	font-size: 22rpx;
 	color: #60A5FA;
 	font-weight: bold;
 }
 
-/* ==================== 选择按钮 ==================== */
-.cb-select-btn {
+.ccb-select-btn {
 	width: 480rpx;
 	height: 88rpx;
 	background-color: #00C853;
@@ -374,11 +412,12 @@ export default {
 	border-top-right-radius: 44rpx;
 	border-bottom-left-radius: 44rpx;
 	border-bottom-right-radius: 44rpx;
+	display: flex;
 	align-items: center;
 	justify-content: center;
 }
 
-.cb-select-text {
+.ccb-select-text {
 	font-size: 32rpx;
 	font-weight: bold;
 	color: #FFFFFF;

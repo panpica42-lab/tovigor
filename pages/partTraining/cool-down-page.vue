@@ -58,7 +58,7 @@
 		</view>
 		
 		<!-- 返回按钮（左上角浮层） -->
-		<CommonBackButton class="back-btn-position" />
+		<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
 		
 		<!-- 标题（顶部居中） -->
 		<view class="header-title">
@@ -72,12 +72,12 @@
 		
 		<!-- AI教练气泡对话框 -->
 		<view class="coach-dialog-section">
-			<CoachBubbleBox
+			<CoachBox
 				:text="currentStretchTip"
 				@modal-open="handleCoachModalOpen"
 				@modal-close="handleCoachModalClose"
 				@coach-changed="handleCoachChanged"
-			></CoachBubbleBox>
+			></CoachBox>
 		</view>
 		
 		<!-- 虚拟形象模拟缩略图（左下角） -->
@@ -120,8 +120,9 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
-import CoachBubbleBox from '@/components/coach-bubble-box.vue'
+import CoachBox from '@/components/coach/coach-box-entry.vue'
 import TrainingCompleteWindow from '@/components/modals/training-complete-window.vue'
+import { navigateBackOrReLaunch, navigateBackToRoute } from '@/utils/navigation.js'
 
 // ========== 测试开关 ==========
 const SHOW_TEST_BUTTON = ref(true)
@@ -225,10 +226,7 @@ const handleContinue = () => {
 const handlePrevStep = () => {
 	isControlPanelVisible.value = false
 	clearProgressTimer()
-	// 返回正式训练页
-	uni.navigateBack({
-		delta: 1
-	})
+	navigateBackToRoute('/pages/partTraining/formal-training', '/pages/partTraining/part-training')
 }
 
 const handleNextStep = () => {
@@ -240,9 +238,7 @@ const handleNextStep = () => {
 const handleExitTraining = () => {
 	isControlPanelVisible.value = false
 	clearProgressTimer()
-	uni.navigateBack({
-		delta: 4  // 返回到课程列表
-	})
+	navigateBackToRoute('/pages/partTraining/part-training')
 }
 
 // ========== 训练完成弹窗 ==========
@@ -253,15 +249,21 @@ const navigateToComplete = () => {
 
 const closeFinishModal = () => {
 	isFinishModalVisible.value = false
-	// 返回到部位训练页
-	uni.reLaunch({
-		url: '/pages/partTraining/part-training'
-	})
+	navigateBackToRoute('/pages/partTraining/part-training')
 }
 
 const skipToComplete = () => {
 	clearProgressTimer()
 	navigateToComplete()
+}
+
+const handleBack = () => {
+	if (isFinishModalVisible.value) {
+		isFinishModalVisible.value = false
+		return
+	}
+	clearProgressTimer()
+	navigateBackOrReLaunch('/pages/partTraining/part-training')
 }
 
 // 关闭虚拟形象模拟

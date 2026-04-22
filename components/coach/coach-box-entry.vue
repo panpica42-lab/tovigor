@@ -1,16 +1,24 @@
+<!--
+ * AI 教练框统一入口
+ *
+ * 职责：
+ *   1. 对页面暴露统一导入路径
+ *   2. 按平台分发到 vue / nvue 实现
+ *   3. 转发教练切换与弹窗事件
+ -->
 <template>
 	<!-- #ifdef APP-NVUE -->
-	<NvueCoachBubbleBox
+	<CoachBoxNvue
 		:text="text"
 		:bubble-width="bubbleWidth"
 		@coach-changed="handleCoachChanged"
 		@modal-open="handleModalOpen"
 		@modal-close="handleModalClose"
-	></NvueCoachBubbleBox>
+	></CoachBoxNvue>
 	<!-- #endif -->
 
 	<!-- #ifndef APP-NVUE -->
-	<SharedCoachBubbleBox
+	<CoachBox
 		:text="text"
 		:bubble-width="bubbleWidth"
 		:content-background="contentBackground"
@@ -18,18 +26,18 @@
 		@coach-changed="handleCoachChanged"
 		@modal-open="handleModalOpen"
 		@modal-close="handleModalClose"
-	></SharedCoachBubbleBox>
+	></CoachBox>
 	<!-- #endif -->
 </template>
 
 <script>
-import SharedCoachBubbleBox from '@/components/shared/coach-bubble-box.vue'
-import NvueCoachBubbleBox from '@/components/nvue-ui-box/coach-bubble-box.vue'
+import CoachBox from '@/components/coach/coach-box.vue'
+import CoachBoxNvue from '@/components/coach/coach-box-nvue.vue'
 
 export default {
 	components: {
-		SharedCoachBubbleBox,
-		NvueCoachBubbleBox
+		CoachBox,
+		CoachBoxNvue
 	},
 
 	props: {

@@ -487,7 +487,7 @@ export default {
 		if (this.powerOn) {
 			this.$serial.stopForce()  // 安全停力，持续发送 OFF 确保下位机收到
 		}
-		// 串口断开由 nvueSerialMixin 自动处理
+		// 串口连接保持到 nvue 上下文，由 nvueSerialMixin 管理
 	},
 
 	methods: {
@@ -759,18 +759,26 @@ export default {
 			this.$serial.startWorking(this.dialValue, this.currentForceModeValue, 200)
 		},
 
-		// 关机时顺便清理活动计时器；若当前在切换态，也要取消过渡状态
-		doPowerOff() {
+		syncPowerOffState() {
 			this.powerOn = false
 			if (this.activeTimer) { clearInterval(this.activeTimer); this.activeTimer = null }
 			if (this.trainingFlow === TRAINING_FLOW.TRANSITIONING) {
 				this.resetNextActionTransitionState()
 			}
-			this.$serial.stopForce()  // 安全停力，持续发送 OFF 确保下位机收到
 			this.dialValue = this.lastForce
 			if (this.trainingFlow !== TRAINING_FLOW.COMPLETED) {
 				this.trainingFlow = TRAINING_FLOW.IDLE
 			}
+		},
+
+		// 关机时顺便清理活动计时器；若当前在切换态，也要取消过渡状态
+		doPowerOff() {
+			this.syncPowerOffState()
+			this.$serial.stopForce()  // 安全停力，持续发送 OFF 确保下位机收到
+		},
+
+		_nvueSerialBeforeStopForceOnHide() {
+			this.syncPowerOffState()
 		},
 
 		// 记录视频当前播放进度

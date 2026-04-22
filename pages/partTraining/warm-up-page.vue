@@ -48,7 +48,7 @@
 		</view>
 		
 		<!-- 返回按钮（左上角浮层） -->
-		<CommonBackButton class="back-btn-position" />
+		<CommonBackButton class="back-btn-position" :useDefault="false" @click="handleBack" />
 		
 		<!-- 标题（顶部居中） -->
 		<view class="header-title">
@@ -62,12 +62,12 @@
 		
 		<!-- AI教练气泡对话框 -->
 		<view class="coach-dialog-section">
-			<CoachBubbleBox
+			<CoachBox
 				:text="currentWarmupTip"
 				@modal-open="handleCoachModalOpen"
 				@modal-close="handleCoachModalClose"
 				@coach-changed="handleCoachChanged"
-			></CoachBubbleBox>
+			></CoachBox>
 		</view>
 		
 		<!-- 虚拟形象模拟缩略图（左下角） -->
@@ -104,7 +104,8 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
-import CoachBubbleBox from '@/components/coach-bubble-box.vue'
+import CoachBox from '@/components/coach/coach-box-entry.vue'
+import { navigateBackOrReLaunch, navigateBackToRoute } from '@/utils/navigation.js'
 
 // ========== 测试开关：设置为 false 关闭测试按钮 ==========
 const SHOW_TEST_BUTTON = ref(true)
@@ -241,9 +242,7 @@ const handleContinue = () => {
 const handlePrevStep = () => {
 	isControlPanelVisible.value = false
 	clearProgressTimer()
-	uni.navigateBack({
-		delta: 1
-	})
+	navigateBackOrReLaunch('/pages/partTraining/part-training')
 }
 
 // 下一训练环节（调整器械）
@@ -257,9 +256,12 @@ const handleNextStep = () => {
 const handleExitTraining = () => {
 	isControlPanelVisible.value = false
 	clearProgressTimer()
-	uni.navigateBack({
-		delta: 2  // 返回两级（跳过课程详情页，回到课程列表）
-	})
+	navigateBackToRoute('/pages/partTraining/part-training')
+}
+
+const handleBack = () => {
+	clearProgressTimer()
+	navigateBackOrReLaunch('/pages/partTraining/part-training')
 }
 </script>
 

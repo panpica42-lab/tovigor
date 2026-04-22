@@ -27,13 +27,20 @@ export default {
   },
   onHide() {
     console.log('App Hide')
+
+    // #ifdef APP-PLUS
+    if (!DEBUG_MODE && serialService.isWorking()) {
+      console.log('[App] App 进入后台，执行停力保连')
+      serialService.stopForce()
+    }
+    // #endif
   },
   methods: {
     // 初始化串口连接
     async initSerialConnection() {
       console.log('[App] 正在初始化串口连接...')
       try {
-        const result = await serialService.connect(APP_SERIAL_CONNECT_CONFIG)
+        const result = await serialService.ensureConnected(APP_SERIAL_CONNECT_CONFIG)
         console.log('[App] 串口连接成功:', result)
       } catch (err) {
         console.error('[App] 串口连接失败:', err)
