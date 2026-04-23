@@ -9,10 +9,15 @@
 		<!-- 主体内容：左右两列 -->
 		<view class="content">
 			<!-- 左列：sidebar -->
-			<TrainingFilterSidebar
+			<CourseLibrarySidebar
 				class="sidebar"
 				:filters="filters"
+				:hasPendingChanges="hasPendingFilterChanges"
+				:hasAppliedFilters="hasAppliedCourseFilters"
+				:filterCount="filterButtonCount"
 				@changeFilter="handleFilterChange"
+				@applyFilters="handleApplyFilters"
+				@goActionLibrary="handleGoActionLibrary"
 			/>
 
 			<!-- 右列：main-column -->
@@ -40,7 +45,7 @@
 				>
 					<view class="course-grid">
 						<view
-							v-for="course in courseList"
+							v-for="course in filteredCourses"
 							:key="course.id"
 							class="course-item"
 						>
@@ -58,16 +63,15 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
-import TrainingFilterSidebar from '@/components/ui-box/training-filter-sidebar.vue'
+import CourseLibrarySidebar from '@/components/ui-box/CourseLibrarySidebar.vue'
 import TrainingCourseCard from '@/components/course-list/training-course-card.vue'
 import { navigateBackOrReLaunch } from '@/utils/navigation.js'
 
 const searchKeyword = ref('')
 
-// 筛选状态 - 改为数组形式支持多选
-const filters = ref({
+const createFilterState = () => ({
 	gender: [],
 	goal: [],
 	level: [],
@@ -78,12 +82,48 @@ const filters = ref({
 	coach: []
 })
 
+const COURSE_FILTER_KEYS = ['gender', 'goal', 'level', 'part', 'method', 'duration', 'equipment']
+
+const cloneFilters = (source) => ({
+	gender: [...(source.gender || [])],
+	goal: [...(source.goal || [])],
+	level: [...(source.level || [])],
+	part: [...(source.part || [])],
+	method: [...(source.method || [])],
+	duration: [...(source.duration || [])],
+	equipment: [...(source.equipment || [])],
+	coach: [...(source.coach || [])]
+})
+
+const filters = ref(createFilterState())
+const appliedFilters = ref(createFilterState())
+
+/*
+ * 课程库基础数据。
+ * 每个课程对象都带筛选字段：
+ * gender: all=全部，female=女性，male=男性
+ * goal: fat-loss=减脂塑形，muscle=增肌增力，health=全面健康，wellness=健康养生，youth=适能训练
+ * level: beginner=初级，intermediate=中级，advanced=高级
+ * part: shoulder=肩部，chest=胸部，back=背部，arm=手臂，core=腹部，leg=臀腿，full-body=全身
+ * method: resistance=有力臂，no-resistance=无力臂
+ * durationRange: 0-15=<15分，15-25=15-25分，25-40=25-40分，40+=40分以上
+ * equipment:
+ *   short-bar=短杆，ankle-strap=脚环，triangle-handle=三角把，middle-bar=中杆，yoga-mat=瑜伽垫，
+ *   lat-bar=横杆，foam-roller=泡沫轴，resistance-band=弹力带，dual-rope=两头绳，fitness-bench=健身椅
+ */
 const courseList = ref([
 	{
 		id: 1,
 		title: '美人肩塑形',
 		duration: '15min',
 		cover: '/static/icons/partTrainingActivity/course_pic_01.jpg',
+		gender: 'female',
+		goal: 'fat-loss',
+		level: 'intermediate',
+		part: 'shoulder',
+		method: 'no-resistance',
+		durationRange: '15-25',
+		equipment: ['short-bar', 'fitness-bench'],
 		tags: ['减脂塑形', '中等', '三角肌后束']
 	},
 	{
@@ -91,6 +131,13 @@ const courseList = ref([
 		title: '基础臀部塑形',
 		duration: '45min',
 		cover: '/static/icons/partTrainingActivity/course_pic_02.jpg',
+		gender: 'female',
+		goal: 'fat-loss',
+		level: 'advanced',
+		part: 'leg',
+		method: 'no-resistance',
+		durationRange: '40+',
+		equipment: ['ankle-strap', 'resistance-band'],
 		tags: ['塑形紧致', '较难', '臀大肌']
 	},
 	{
@@ -98,6 +145,13 @@ const courseList = ref([
 		title: '肩部肌群训练',
 		duration: '25min',
 		cover: '/static/icons/partTrainingActivity/course_pic_03.jpg',
+		gender: 'male',
+		goal: 'muscle',
+		level: 'intermediate',
+		part: 'shoulder',
+		method: 'resistance',
+		durationRange: '15-25',
+		equipment: ['triangle-handle', 'middle-bar'],
 		tags: ['力量增强', '中等', '三角肌外侧']
 	},
 	{
@@ -105,6 +159,13 @@ const courseList = ref([
 		title: '美背新训练',
 		duration: '30min',
 		cover: '/static/icons/partTrainingActivity/course_pic_04.jpg',
+		gender: 'female',
+		goal: 'wellness',
+		level: 'intermediate',
+		part: 'back',
+		method: 'resistance',
+		durationRange: '25-40',
+		equipment: ['lat-bar', 'dual-rope'],
 		tags: ['塑形紧致', '中等', '背阔肌']
 	},
 	{
@@ -112,6 +173,13 @@ const courseList = ref([
 		title: '爆发腿部燃脂',
 		duration: '20min',
 		cover: '/static/icons/partTrainingActivity/course_pic_05.jpg',
+		gender: 'all',
+		goal: 'fat-loss',
+		level: 'advanced',
+		part: 'leg',
+		method: 'resistance',
+		durationRange: '15-25',
+		equipment: ['ankle-strap', 'dual-rope'],
 		tags: ['高效燃脂', '较难', '股四头肌']
 	},
 	{
@@ -119,6 +187,13 @@ const courseList = ref([
 		title: '核心塑型进阶',
 		duration: '18min',
 		cover: '/static/icons/partTrainingActivity/course_pic_06.jpg',
+		gender: 'all',
+		goal: 'health',
+		level: 'intermediate',
+		part: 'core',
+		method: 'no-resistance',
+		durationRange: '15-25',
+		equipment: ['yoga-mat', 'foam-roller'],
 		tags: ['核心稳定', '中等', '腹横肌']
 	},
 	{
@@ -126,6 +201,13 @@ const courseList = ref([
 		title: '蜜桃臀养成',
 		duration: '35min',
 		cover: '/static/icons/partTrainingActivity/course_pic_01.jpg',
+		gender: 'female',
+		goal: 'fat-loss',
+		level: 'intermediate',
+		part: 'leg',
+		method: 'no-resistance',
+		durationRange: '25-40',
+		equipment: ['ankle-strap', 'fitness-bench'],
 		tags: ['臀部塑形', '中等', '臀中肌']
 	},
 	{
@@ -133,6 +215,13 @@ const courseList = ref([
 		title: '全身燃脂HIIT',
 		duration: '22min',
 		cover: '/static/icons/partTrainingActivity/course_pic_02.jpg',
+		gender: 'all',
+		goal: 'youth',
+		level: 'advanced',
+		part: 'full-body',
+		method: 'no-resistance',
+		durationRange: '15-25',
+		equipment: ['resistance-band', 'yoga-mat'],
 		tags: ['高效燃脂', '较难', '全身']
 	},
 	{
@@ -140,6 +229,13 @@ const courseList = ref([
 		title: '手臂线条雕刻',
 		duration: '28min',
 		cover: '/static/icons/partTrainingActivity/course_pic_03.jpg',
+		gender: 'female',
+		goal: 'muscle',
+		level: 'intermediate',
+		part: 'arm',
+		method: 'resistance',
+		durationRange: '25-40',
+		equipment: ['short-bar', 'dual-rope'],
 		tags: ['力量增强', '中等', '肱二头肌']
 	},
 	{
@@ -147,9 +243,74 @@ const courseList = ref([
 		title: '腹肌撕裂者',
 		duration: '16min',
 		cover: '/static/icons/partTrainingActivity/course_pic_04.jpg',
+		gender: 'male',
+		goal: 'muscle',
+		level: 'advanced',
+		part: 'core',
+		method: 'no-resistance',
+		durationRange: '15-25',
+		equipment: ['yoga-mat', 'fitness-bench'],
 		tags: ['核心强化', '较难', '腹直肌']
 	}
 ])
+
+const getFilterValues = (source, key) => source[key] || []
+
+const getCourseFilterCount = (source) => {
+	return COURSE_FILTER_KEYS.reduce((count, key) => count + getFilterValues(source, key).length, 0)
+}
+
+const areFilterValuesEqual = (leftValues, rightValues) => {
+	if (leftValues.length !== rightValues.length) {
+		return false
+	}
+
+	const sortedLeft = [...leftValues].sort()
+	const sortedRight = [...rightValues].sort()
+	return sortedLeft.every((value, index) => value === sortedRight[index])
+}
+
+const hasPendingFilterChanges = computed(() => {
+	return COURSE_FILTER_KEYS.some((key) => {
+		return !areFilterValuesEqual(
+			getFilterValues(filters.value, key),
+			getFilterValues(appliedFilters.value, key)
+		)
+	})
+})
+
+const hasAppliedCourseFilters = computed(() => getCourseFilterCount(appliedFilters.value) > 0)
+
+const filterButtonCount = computed(() => {
+	return hasPendingFilterChanges.value
+		? getCourseFilterCount(filters.value)
+		: getCourseFilterCount(appliedFilters.value)
+})
+
+const matchesAppliedFilter = (selectedValues, courseValue) => {
+	if (!selectedValues || selectedValues.length === 0) {
+		return true
+	}
+
+	if (courseValue === undefined || courseValue === null) {
+		return true
+	}
+
+	const courseValues = Array.isArray(courseValue) ? courseValue : [courseValue]
+	return selectedValues.some(value => courseValues.includes(value))
+}
+
+const filteredCourses = computed(() => {
+	return courseList.value.filter((course) => {
+		return matchesAppliedFilter(appliedFilters.value.gender, course.gender) &&
+			matchesAppliedFilter(appliedFilters.value.goal, course.goal) &&
+			matchesAppliedFilter(appliedFilters.value.level, course.level) &&
+			matchesAppliedFilter(appliedFilters.value.part, course.part) &&
+			matchesAppliedFilter(appliedFilters.value.method, course.method) &&
+			matchesAppliedFilter(appliedFilters.value.duration, course.durationRange) &&
+			matchesAppliedFilter(appliedFilters.value.equipment, course.equipment)
+	})
+})
 
 const handleSearchConfirm = (event) => {
 	searchKeyword.value = event.detail.value
@@ -176,16 +337,18 @@ const handleCoursePlay = (course) => {
 	})
 }
 
-// 筛选变更事件
-const handleFilterChange = (data) => {
-	console.log('筛选变更:', data)
-	filters.value[data.key] = data.values
-	
-	// TODO: 根据筛选条件重新加载课程列表
-	uni.showToast({
-		title: `筛选: ${data.option.label}`,
-		icon: 'none'
+const handleGoActionLibrary = () => {
+	uni.navigateTo({
+		url: '/pages/freeTraining/action-library'
 	})
+}
+
+const handleFilterChange = (data) => {
+	filters.value[data.key] = data.values
+}
+
+const handleApplyFilters = () => {
+	appliedFilters.value = cloneFilters(filters.value)
 }
 </script>
 
@@ -196,6 +359,7 @@ const handleFilterChange = (data) => {
 	display: flex;
 	flex-direction: column;
 	padding: 4rpx 28rpx 0 16rpx;
+	box-sizing: border-box;
 	overflow: hidden ;
 }
 
@@ -225,12 +389,14 @@ const handleFilterChange = (data) => {
 	display: flex;
 	flex-direction: row;
 	flex: 1;   // 填满 header 下方所有空间
+	min-height: 0;
 	gap: 24rpx;
 	overflow: hidden; // 建议加上，避免横向多余滚动
 }
 
 .sidebar {
 	flex-shrink: 0;
+	min-height: 0;
 }
 
 .main-column {
