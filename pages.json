@@ -201,15 +201,6 @@
 				"navigationBarTitleText": "Chart Test",
 				"disableScroll": false
 			}
-		},
-		{
-			"path": "pages/partTraining/components/ai-recommend",
-			"style": {
-				"navigationBarTitleText": "",
-				"navigationStyle": "custom",
-				"disableScroll": true,
-				"bounce": "none"
-			}
 		}
 	],
 	"globalStyle": {

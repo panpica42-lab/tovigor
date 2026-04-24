@@ -35,6 +35,7 @@
 				<image
 					:src="currentCoach.avatar"
 					:style="{ width: '66rpx', height: '66rpx' }"
+					mode="aspectFit"
 				></image>
 			</view>
 
@@ -44,69 +45,26 @@
 			</view>
 		</view>
 
-		<!-- ===== 教练选择弹窗（内建） ===== -->
-		<view v-if="modalVisible" class="cb-modal-mask" @click="closeModal">
-			<view class="cb-modal-card" @click.stop="">
-
-				<!-- 关闭按钮 -->
-				<text class="cb-modal-close" @click="closeModal">✕</text>
-
-				<!-- 标题 -->
-				<text class="cb-modal-title">AI教练</text>
-
-				<!-- 切换按钮 -->
-				<view class="cb-switch-row">
-					<view
-						v-for="coach in allCoaches"
-						:key="coach.value"
-						class="cb-switch-btn"
-						:style="coach.value === previewValue
-							? { backgroundColor: '#00C853', borderColor: '#00C853' }
-							: { backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.3)' }"
-						@click="previewCoach(coach.value)"
-					>
-						<text class="cb-switch-text">{{ coach.fullName }}</text>
-					</view>
-				</view>
-
-				<!-- 预览头像 -->
-				<view class="cb-avatar-wrap">
-					<image
-						:src="previewCoachData.avatar"
-						:style="{ width: '200rpx', height: '200rpx', borderRadius: '100rpx' }"
-					></image>
-				</view>
-
-				<!-- 教练信息 -->
-				<text class="cb-coach-name">{{ previewCoachData.label }}</text>
-				<text class="cb-coach-ename">{{ previewCoachData.englishName }}</text>
-				<text class="cb-coach-intro">{{ previewCoachData.intro }}</text>
-
-				<!-- 特长标签 -->
-				<view class="cb-tags-row">
-					<view
-						v-for="(tag, i) in previewCoachData.tags"
-						:key="i"
-						class="cb-tag"
-					>
-						<text class="cb-tag-text">{{ tag }}</text>
-					</view>
-				</view>
-
-				<!-- 选择按钮 -->
-				<view class="cb-select-btn" @click="confirmSelect">
-					<text class="cb-select-text">选择{{ previewCoachData.label }}</text>
-				</view>
-			</view>
-		</view>
+		<CoachDetailModal
+			:show="modalVisible"
+			:coachData="currentCoach"
+			:switchable="true"
+			@update:show="handleModalVisibilityChange"
+			@select="handleCoachSelect"
+		></CoachDetailModal>
 
 	</view>
 </template>
 
 <script>
-import { getSelectedCoach, setSelectedCoach, getAllCoaches, getCoachByValue } from '@/utils/coachManager.js'
+import CoachDetailModal from '@/components/coach/coach-detail-modal-nvue.vue'
+import { getSelectedCoach, setSelectedCoach, getCoachByValue } from '@/utils/coachManager.js'
 
 export default {
+	components: {
+		CoachDetailModal
+	},
+
 	props: {
 		// 气泡文字（页面传入，组件不关心内容来源）
 		text: {
@@ -124,12 +82,9 @@ export default {
 
 	data() {
 		const coach = getSelectedCoach()
-		const coachesObj = getAllCoaches()
 		return {
 			currentCoach: coach,
-			allCoaches: Object.values(coachesObj),
-			modalVisible: false,
-			previewValue: coach.value
+			modalVisible: false
 		}
 	},
 
@@ -144,35 +99,34 @@ export default {
 		// 仅在页面显式传入时限制宽度，默认保持组件原有自适应行为
 		contentStyle() {
 			return this.bubbleWidth ? { width: this.bubbleWidth } : {}
-		},
-
-		previewCoachData() {
-			return getCoachByValue(this.previewValue) || this.currentCoach
 		}
 	},
 
 	methods: {
+		syncCurrentCoach() {
+			this.currentCoach = getSelectedCoach()
+		},
+
 		openModal() {
-			this.previewValue = this.currentCoach.value
+			this.syncCurrentCoach()
 			this.modalVisible = true
 			this.$emit('modal-open')
 		},
 
-		closeModal() {
-			if (!this.modalVisible) return
-			this.modalVisible = false
-			this.$emit('modal-close')
+		handleModalVisibilityChange(visible) {
+			const wasVisible = this.modalVisible
+			this.modalVisible = visible
+			if (!visible && wasVisible) {
+				this.$emit('modal-close')
+			}
 		},
 
-		previewCoach(val) {
-			this.previewValue = val
-		},
-
-		confirmSelect() {
-			setSelectedCoach(this.previewValue)
-			this.currentCoach = getCoachByValue(this.previewValue)
+		handleCoachSelect(coachData) {
+			if (!coachData) return
+			const saved = setSelectedCoach(coachData.value)
+			if (!saved) return
+			this.currentCoach = getCoachByValue(coachData.value) || this.currentCoach
 			this.$emit('coach-changed', this.currentCoach)
-			this.closeModal()
 		}
 	}
 }
@@ -230,15 +184,23 @@ export default {
 }
 
 /* ==================== 弹窗遮罩 ==================== */
-.cb-modal-mask {
+.cb-modal-overlay {
 	position: fixed;
 	top: 0;
 	left: 0;
 	right: 0;
 	bottom: 0;
-	background-color: rgba(0, 0, 0, 0.6);
 	align-items: center;
 	justify-content: center;
+}
+
+.cb-modal-mask {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.6);
 }
 
 /* ==================== 弹窗卡片 ==================== */
@@ -255,6 +217,7 @@ export default {
 	padding-right: 32rpx;
 	flex-direction: column;
 	align-items: center;
+	z-index: 1;
 }
 
 /* 关闭按钮 */
@@ -262,7 +225,8 @@ export default {
 	position: absolute;
 	top: 20rpx;
 	left: 20rpx;
-	font-size: 32rpx;
+	font-size: 40rpx;
+	line-height: 40rpx;
 	color: rgba(255, 255, 255, 0.7);
 }
 
@@ -304,9 +268,14 @@ export default {
 
 /* ==================== 头像 ==================== */
 .cb-avatar-wrap {
+	width: 100%;
 	align-items: center;
 	justify-content: center;
 	margin-bottom: 32rpx;
+}
+
+.cb-preview-avatar {
+	flex-shrink: 0;
 }
 
 /* ==================== 教练信息 ==================== */

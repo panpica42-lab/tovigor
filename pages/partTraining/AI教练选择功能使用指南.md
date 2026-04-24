@@ -16,14 +16,29 @@ tovigor_v1/
 ├── utils/
 │   └── coachManager.js                      # 教练数据管理工具类
 ├── components/
-│   └── modals/
-│       └── coach-detail-modal.vue           # 教练详情弹窗组件
+│   ├── modals/
+│   │   └── coach-detail-modal.vue           # 教练详情弹窗组件
+│   └── ui-box/
+│       ├── CourseLibrarySidebar.vue         # 课程库筛选栏（集成教练选择）
+│       └── ActionLibrarySidebar.vue         # 动作库筛选栏（集成教练选择）
 └── pages/
     └── partTraining/
-        ├── components/
-        │   └── training-filter-sidebar.vue  # 筛选栏（集成教练选择）
         └── warm-up-page.vue                 # 热身页（显示选中的教练）
 ```
+
+## 组件拆分说明
+
+早期方案中，课程库和动作库共用 `training-filter-sidebar.vue`。
+
+后续产品语义发生分化：
+- 课程库侧边栏服务于“找课程”，包含课程库/动作库切换、课程筛选和 AI 推荐入口
+- 动作库侧边栏服务于“找动作”，交互重点和文案与课程库不再一致
+
+因此当前实现已经不再共用 `training-filter-sidebar.vue`，而是拆分为两个各自承担业务语义的组件：
+- `components/ui-box/CourseLibrarySidebar.vue`
+- `components/ui-box/ActionLibrarySidebar.vue`
+
+旧的 `training-filter-sidebar.vue` 已移除，本文档中的筛选栏说明以 `CourseLibrarySidebar.vue` 为主，`ActionLibrarySidebar.vue` 的 AI 教练逻辑与其保持同构。
 
 ## 核心组件说明
 
@@ -110,9 +125,11 @@ getCoachDetailInfo('vince')
 />
 ```
 
-### 3. training-filter-sidebar.vue - 筛选栏（集成教练选择）
+### 3. CourseLibrarySidebar.vue / ActionLibrarySidebar.vue - 筛选栏（集成教练选择）
 
-**位置**: `pages/partTraining/components/training-filter-sidebar.vue`
+**位置**:
+- `components/ui-box/CourseLibrarySidebar.vue`
+- `components/ui-box/ActionLibrarySidebar.vue`
 
 **改动说明**:
 
@@ -264,7 +281,7 @@ getCoachDetailInfo('vince')
 
 1. **用户点击教练卡片**:
    ```javascript
-   // training-filter-sidebar.vue
+   // CourseLibrarySidebar.vue（ActionLibrarySidebar.vue 同理）
    @click="onOptionClick('coach', coach)"
    ```
 
@@ -285,7 +302,7 @@ getCoachDetailInfo('vince')
 
 4. **保存教练信息**:
    ```javascript
-   // training-filter-sidebar.vue
+   // CourseLibrarySidebar.vue（ActionLibrarySidebar.vue 同理）
    @select="handleCoachSelect"
      → setSelectedCoach(coachData.value)     // 保存到本地存储
      → emits('changeFilter', ...)            // 更新筛选状态
@@ -395,7 +412,7 @@ console.log(coach.intro)       // "经验丰富的..."
 
 ### 教练卡片样式
 
-在 `training-filter-sidebar.vue` 中调整:
+在 `CourseLibrarySidebar.vue` 或 `ActionLibrarySidebar.vue` 中调整:
 
 - **卡片高度**: `.coach-card { min-height: 72rpx; }`
 - **背景色**: `background: #1E3A8A;`

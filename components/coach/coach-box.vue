@@ -19,6 +19,7 @@
 					class="ccb-header-avatar"
 					:src="currentCoach.avatar"
 					:style="{ width: '66rpx', height: '66rpx' }"
+					mode="aspectFit"
 				></image>
 			</view>
 
@@ -27,56 +28,19 @@
 			</view>
 		</view>
 
-		<view v-if="modalVisible" class="ccb-modal-overlay">
-			<view class="ccb-modal-mask" @click="closeModal"></view>
-
-			<view class="ccb-modal-card">
-				<text class="ccb-modal-close" @click="closeModal">×</text>
-				<text class="ccb-modal-title">AI教练</text>
-
-				<view class="ccb-switch-row">
-					<view
-						v-for="coach in allCoaches"
-						:key="coach.value"
-						class="ccb-switch-btn"
-						:style="coach.value === previewValue ? activeSwitchStyle : inactiveSwitchStyle"
-						@click="previewCoach(coach.value)"
-					>
-						<text class="ccb-switch-text">{{ coach.fullName }}</text>
-					</view>
-				</view>
-
-				<view class="ccb-avatar-wrap">
-					<image
-						:src="previewCoachData.avatar"
-						:style="{ width: '200rpx', height: '200rpx', borderRadius: '100rpx' }"
-					></image>
-				</view>
-
-				<text class="ccb-coach-name">{{ previewCoachData.label }}</text>
-				<text class="ccb-coach-ename">{{ previewCoachData.englishName }}</text>
-				<text class="ccb-coach-intro">{{ previewCoachData.intro }}</text>
-
-				<view class="ccb-tags-row">
-					<view
-						v-for="(tag, index) in previewCoachData.tags"
-						:key="index"
-						class="ccb-tag"
-					>
-						<text class="ccb-tag-text">{{ tag }}</text>
-					</view>
-				</view>
-
-				<view class="ccb-select-btn" @click="confirmSelect">
-					<text class="ccb-select-text">选择{{ previewCoachData.label }}</text>
-				</view>
-			</view>
-		</view>
+		<CoachDetailModal
+			:show="modalVisible"
+			:coachData="currentCoach"
+			:switchable="true"
+			@update:show="handleModalVisibilityChange"
+			@select="handleCoachSelect"
+		></CoachDetailModal>
 	</view>
 </template>
 
 <script>
-import { getSelectedCoach, setSelectedCoach, getAllCoaches, getCoachByValue } from '@/utils/coachManager.js'
+import CoachDetailModal from '@/components/coach/coach-detail-modal-vue.vue'
+import { getSelectedCoach, setSelectedCoach, getCoachByValue } from '@/utils/coachManager.js'
 
 function getFirstColor(backgroundText) {
 	if (!backgroundText) return '#667eea'
@@ -85,6 +49,10 @@ function getFirstColor(backgroundText) {
 }
 
 export default {
+	components: {
+		CoachDetailModal
+	},
+
 	props: {
 		text: {
 			type: String,
@@ -110,17 +78,7 @@ export default {
 		const currentCoach = getSelectedCoach()
 		return {
 			currentCoach,
-			allCoaches: Object.values(getAllCoaches()),
-			modalVisible: false,
-			previewValue: currentCoach.value,
-			activeSwitchStyle: {
-				backgroundColor: '#00C853',
-				borderColor: '#00C853'
-			},
-			inactiveSwitchStyle: {
-				backgroundColor: 'rgba(255,255,255,0.1)',
-				borderColor: 'rgba(255,255,255,0.3)'
-			}
+			modalVisible: false
 		}
 	},
 
@@ -154,10 +112,6 @@ export default {
 				style.minWidth = '100%'
 			}
 			return style
-		},
-
-		previewCoachData() {
-			return getCoachByValue(this.previewValue) || this.currentCoach
 		}
 	},
 
@@ -173,30 +127,26 @@ export default {
 
 		openModal() {
 			this.syncCurrentCoach()
-			this.previewValue = this.currentCoach.value
 			this.modalVisible = true
 			this.$emit('modal-open')
 		},
 
-		closeModal() {
-			if (!this.modalVisible) return
-			this.modalVisible = false
-			this.$emit('modal-close')
-		},
-
-		previewCoach(coachValue) {
-			this.previewValue = coachValue
-		},
-
-		confirmSelect() {
-			if (this.previewValue !== this.currentCoach.value) {
-				const saved = setSelectedCoach(this.previewValue)
-				if (saved) {
-					this.currentCoach = getCoachByValue(this.previewValue) || this.currentCoach
-					this.$emit('coach-changed', this.currentCoach)
-				}
+		handleModalVisibilityChange(visible) {
+			const wasVisible = this.modalVisible
+			this.modalVisible = visible
+			if (!visible && wasVisible) {
+				this.$emit('modal-close')
 			}
-			this.closeModal()
+		},
+
+		handleCoachSelect(coachData) {
+			if (!coachData) return
+			if (coachData.value !== this.currentCoach.value) {
+				const saved = setSelectedCoach(coachData.value)
+				if (!saved) return
+				this.currentCoach = getCoachByValue(coachData.value) || this.currentCoach
+				this.$emit('coach-changed', this.currentCoach)
+			}
 		}
 	}
 }
@@ -343,10 +293,15 @@ export default {
 }
 
 .ccb-avatar-wrap {
+	width: 100%;
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	margin-bottom: 32rpx;
+}
+
+.ccb-preview-avatar {
+	flex-shrink: 0;
 }
 
 .ccb-coach-name {

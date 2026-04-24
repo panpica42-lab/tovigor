@@ -146,7 +146,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import FilterPill from '@/components/ui-box/filter-pill.vue'
-import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal-vue.vue'
 import { getCoachByValue, getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 
 const props = defineProps({
@@ -254,8 +254,9 @@ const isOptionActive = (groupKey, optionValue) => {
 }
 
 const goToAIRecommend = () => {
-	uni.navigateTo({
-		url: '/pages/partTraining/components/ai-recommend'
+	uni.showToast({
+		title: 'AI推荐功能开发中',
+		icon: 'none'
 	})
 }
 

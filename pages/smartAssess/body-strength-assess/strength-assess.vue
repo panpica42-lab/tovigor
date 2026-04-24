@@ -170,7 +170,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import AssessmentCompleteModal from '@/components/modals/assessment-complete-modal.vue'
 import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
-import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal-vue.vue'
 import StrengthBarCard from './components/strength-bar-card.vue'
 import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 

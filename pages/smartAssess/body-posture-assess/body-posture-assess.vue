@@ -60,7 +60,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import StepBar from '@/components/ui-box/step-bar.vue'
 import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
-import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal-vue.vue'
 import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 
 // ========== 评估流程配置 ==========

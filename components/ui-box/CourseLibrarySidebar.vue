@@ -218,7 +218,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import FilterPill from '@/components/ui-box/filter-pill.vue'
-import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal-vue.vue'
 import { getCoachByValue, getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 
 const props = defineProps({
@@ -249,7 +249,7 @@ const props = defineProps({
 	}
 })
 
-const emits = defineEmits(['changeFilter', 'applyFilters', 'goActionLibrary'])
+const emits = defineEmits(['changeFilter', 'applyFilters', 'goActionLibrary', 'openAiRecommend'])
 
 const showCoachModal = ref(false)
 const currentCoachData = ref(null)
@@ -364,9 +364,7 @@ const isOptionActive = (groupKey, optionValue) => {
 }
 
 const goToAIRecommend = () => {
-	uni.navigateTo({
-		url: '/pages/partTraining/components/ai-recommend'
-	})
+	emits('openAiRecommend')
 }
 
 const handleGoActionLibrary = () => {

@@ -54,7 +54,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
-import CoachDetailModal from '@/components/modals/coach-detail-modal.vue'
+import CoachDetailModal from '@/components/coach/coach-detail-modal-vue.vue'
 import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
 
 // ========== AI教练信息 ==========

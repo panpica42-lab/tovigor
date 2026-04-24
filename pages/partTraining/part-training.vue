@@ -18,6 +18,7 @@
 				@changeFilter="handleFilterChange"
 				@applyFilters="handleApplyFilters"
 				@goActionLibrary="handleGoActionLibrary"
+				@openAiRecommend="handleOpenAiRecommend"
 			/>
 
 			<!-- 右列：main-column -->
@@ -59,6 +60,12 @@
 				</scroll-view>
 			</view>
 		</view>
+
+		<AiRecommendModal
+			:visible="showAiRecommendModal"
+			@update:visible="showAiRecommendModal = $event"
+			@start="handleStartAiRecommend"
+		/>
 	</view>
 </template>
 
@@ -67,9 +74,11 @@ import { ref, computed } from 'vue'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import CourseLibrarySidebar from '@/components/ui-box/CourseLibrarySidebar.vue'
 import TrainingCourseCard from '@/components/course-list/training-course-card.vue'
+import AiRecommendModal from '@/components/modals/ai-recommend-modal.vue'
 import { navigateBackOrReLaunch } from '@/utils/navigation.js'
 
 const searchKeyword = ref('')
+const showAiRecommendModal = ref(false)
 
 const createFilterState = () => ({
 	gender: [],
@@ -340,6 +349,18 @@ const handleCoursePlay = (course) => {
 const handleGoActionLibrary = () => {
 	uni.navigateTo({
 		url: '/pages/freeTraining/action-library'
+	})
+}
+
+const handleOpenAiRecommend = () => {
+	showAiRecommendModal.value = true
+}
+
+const handleStartAiRecommend = () => {
+	showAiRecommendModal.value = false
+	uni.showToast({
+		title: 'AI分析功能开发中',
+		icon: 'none'
 	})
 }
 
