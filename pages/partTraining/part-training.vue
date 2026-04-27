@@ -188,7 +188,7 @@ const handleSearchConfirm = (event) => {
 
 const handleCourseClick = (course) => {
 	uni.navigateTo({
-		url: '/pages/partTraining/part-training-detail-adapter?id=' + course.id
+		url: '/pages/partTraining/course-detail-adapter?id=' + course.id
 	})
 }
 
@@ -430,6 +430,7 @@ const handleApplyFilters = () => {
   flex: 1;           // 占满 main-column 剩余空间
   min-height: 0;     // 允许缩小，否则有些平台会撑破
   background: transparent;
+  touch-action: pan-y; // 明确课程列表区域只处理纵向手势，减少 passive listener 警告
 }
 
 

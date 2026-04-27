@@ -429,6 +429,7 @@ onMounted(() => {
 	flex-direction: column;
 	height: 100%;
 	overflow: hidden;
+	touch-action: none;
 }
 
 .ai-header {

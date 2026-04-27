@@ -18,6 +18,8 @@ Register new routes in `pages.json` and keep feature-specific components close t
 - H5 should be treated as a preview/debug surface, not the source of truth for hardware behavior.
 - Do not treat `npm` scripts as the standard workflow for this repository.
 - Do not proactively use `node`, `npm`, or Node-based tooling unless the user explicitly asks for it or the current task clearly depends on it.
+- Do not start subagents.
+- Do not perform full-project searches unless the user explicitly asks for one.
 
 ## Coding Style & Naming Conventions
 Follow the existing style: tab indentation in `.js`, `.vue`, and JSON-like config files. Use single quotes in JavaScript unless the file already differs. Prefer `camelCase` for variables and functions, `PascalCase` for globally registered components, and kebab-case file names for page and component `.vue` files such as `free-training-intro.vue`.
@@ -58,7 +60,7 @@ For floating controls on `nvue` pages, prefer page-local implementations over re
 When adjusting `nvue` fullscreen interactions, preserve the event-receiving structure and layer order whenever possible. Seemingly harmless layout or `z-index` refactors can change gesture hit-testing and break double-tap behavior. Verify `nvue` interaction changes on a real Android device before considering the task complete.
 
 ## Testing Guidelines
-There is no automated test suite configured in this repository. Validate UI and navigation changes in HBuilderX. For hardware-related work, use the serial test pages under `pages/serial-test/` and document manual verification steps.
+There is no automated test suite configured in this repository. Do not run full test suites. Validate UI and navigation changes in HBuilderX. For hardware-related work, use the serial test pages under `pages/serial-test/` and document manual verification steps.
 
 ## Commit & Pull Request Guidelines
 Recent history favors concise, purpose-first commits, commonly with prefixes like `feat:`, `refactor:`, and `docs:`. Keep commits scoped to one change set and use imperative summaries, for example `feat: add action selection dialog`.

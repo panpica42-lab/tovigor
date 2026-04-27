@@ -89,7 +89,7 @@
 			}
 		},
 		{
-			"path": "pages/partTraining/part-training-detail-adapter",
+			"path": "pages/partTraining/course-detail-adapter",
 			"style": {
 				"navigationBarTitleText": "",
 				"navigationStyle": "custom",

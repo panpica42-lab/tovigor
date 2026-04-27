@@ -20,15 +20,13 @@ tovigor_v1/
 │   ├── freeTraining/             # 自由训练（力量旋钮控制）
 │   ├── partTraining/             # 部位训练模块
 │   │   ├── part-training.vue         # 部位选择
-│   │   ├── part-training-detail-adapter.vue  # 课程列表
+│   │   ├── course-detail-adapter.vue         # 课程详情页壳子
 │   │   ├── warm-up-page.vue           # 热身页
 │   │   ├── adjust-equipment.vue       # 器材调整
 │   │   ├── formal-training.vue        # 正式训练
 │   │   ├── cool-down-page.vue         # 拉伸放松
 │   │   └── components/                # 模块专属组件
-│   │       ├── ai-recommend.vue           # AI推荐
-│   │       ├── course-detail.vue          # 课程详情
-│   │       └── training-filter-sidebar.vue # 筛选侧边栏
+│   │       └── course-detail-content.vue     # 课程详情内容体
 │   ├── smartAssess/              # 智能评估模块
 │   │   ├── first-skip.vue            # 评估入口（三大评估选择）
 │   │   ├── body-function-assess/     # 身体机能评估
@@ -106,7 +104,7 @@ ModalContainerLight（极简容器）
 | `/pages/index/index` | 首页导航 |
 | `/pages/freeTraining/free-training` | 自由训练 |
 | `/pages/partTraining/part-training` | 部位训练选择 |
-| `/pages/partTraining/part-training-detail-adapter` | 课程列表 |
+| `/pages/partTraining/course-detail-adapter` | 课程详情页 |
 | `/pages/partTraining/warm-up-page` | 热身引导 |
 | `/pages/partTraining/adjust-equipment` | 器材调整 |
 | `/pages/partTraining/formal-training` | 正式训练 |

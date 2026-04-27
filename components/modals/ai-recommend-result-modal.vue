@@ -9,7 +9,7 @@
 	3. 卡片里的推荐课程详情
 	4. 底部“开始训练”按钮
 	
-	这里没有重新写一套课程详情 UI，而是直接复用 course-detail.vue 的主体内容。
+	这里没有重新写一套课程详情 UI，而是直接复用 course-detail-content.vue 的主体内容。
 	原因是：推荐结果弹窗本质上展示的还是“某一门课程的详情”，只是展示容器从“独立页面”
 	变成了“弹窗”。
 -->
@@ -30,10 +30,10 @@
 			</view>
 
 			<view class="result-card">
-				<text class="result-title">推荐课程</text>
+				<text class="result-title">{{ course.title || '推荐课程' }}</text>
 
 				<view class="result-body">
-					<CourseDetail
+					<CourseDetailContent
 						:course="course"
 						:showHeader="false"
 						:showIntroCard="false"
@@ -47,7 +47,7 @@
 </template>
 
 <script setup>
-import CourseDetail from '@/pages/partTraining/components/course-detail.vue'
+import CourseDetailContent from '@/pages/partTraining/components/course-detail-content.vue'
 
 const props = defineProps({
 	// 是否显示推荐结果弹窗。
@@ -76,7 +76,7 @@ const handleMaskClick = () => {
 	handleClose()
 }
 
-// 这里接住 course-detail.vue 抛出来的开始训练事件，
+// 这里接住 course-detail-content.vue 抛出来的开始训练事件，
 // 再继续往外抛给 part-training.vue，由页面统一决定后续跳转。
 const handleStartTraining = (course) => {
 	emit('startTraining', course)

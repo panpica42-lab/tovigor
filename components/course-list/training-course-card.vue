@@ -1,3 +1,18 @@
+<!--
+	产品语义说明：
+	这个组件对应用户在课程列表里肉眼看到的“单张训练课程卡片”。
+	它不是“一整列课程卡片容器”，而是列表中的一个课程项。
+	
+	在部位训练页面里，外层页面会用 v-for 循环渲染多次这个组件，
+	于是用户最终看到的是右侧一列或一组课程卡片；但这个文件本身只负责其中一张卡片的展示和点击交互。
+	
+	这张卡片主要负责展示：
+	1. 课程封面
+	2. 课程标题
+	3. 课程时长
+	4. 课程标签摘要
+	5. 右上角播放按钮
+-->
 <template>
   <view class="course-card" @click="handleClick">
     <!-- 封面区域 -->
@@ -31,19 +46,13 @@
 <script setup>
 import { computed } from 'vue'
 
-// 课程对象结构：你可以按自己项目再扩展
+// 这里不定义课程数据本体，只接收父页面传进来的单门课程对象。
+// 在当前部位训练链路里，这个 course 实际来自 pages/partTraining/course-data.js。
+// 这个卡片只消费它展示所需的几个字段：cover、title、duration、tags。
 const props = defineProps({
   course: {
     type: Object,
     required: true
-    // 示例：
-    // {
-    //   id: 1,
-    //   title: '美人肩塑形',
-    //   duration: '15min',
-    //   cover: '/static/courses/shoulder1.jpg',
-    //   tags: ['减脂塑形', '中等', '三角肌后束']
-    // }
   }
 })
 
@@ -135,14 +144,14 @@ const handlePlay = () => {
   flex: 1;
   font-size: 22rpx;
   font-weight: 600;
-  color: #ff5858;
+  color: #111111;
   margin-right: 10rpx;
   line-height: 1.1;
 }
 
 .duration {
   font-size: 18rpx;
-  color: #35b854;
+  color: #111111;
   line-height: 1.1;
 }
 

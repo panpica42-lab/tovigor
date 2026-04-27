@@ -1,6 +1,12 @@
+<!--
+	产品语义说明：
+	这个文件是“课程详情页壳子”。
+	它本身不负责画复杂详情内容，只负责接住路由参数、读取课程数据，
+	再把数据交给 course-detail-content.vue 去显示。
+-->
 <template>
 	<view class="detail-page">
-		<course-detail v-if="course" :course="course" />
+		<CourseDetailContent v-if="course" :course="course" />
 		<view v-else class="loading">加载中...</view>
 	</view>
 </template>
@@ -8,7 +14,7 @@
 <script setup>
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import CourseDetail from './components/course-detail.vue'
+import CourseDetailContent from './components/course-detail-content.vue'
 import { getPartTrainingCourseById } from './course-data.js'
 
 const course = ref(null)
