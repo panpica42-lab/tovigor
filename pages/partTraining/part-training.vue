@@ -66,6 +66,13 @@
 			@update:visible="showAiRecommendModal = $event"
 			@start="handleStartAiRecommend"
 		/>
+
+		<AiRecommendResultModal
+			:visible="showAiRecommendResultModal"
+			:course="recommendedCourse"
+			@update:visible="showAiRecommendResultModal = $event"
+			@startTraining="handleStartRecommendedCourse"
+		/>
 	</view>
 </template>
 
@@ -75,10 +82,14 @@ import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 import CourseLibrarySidebar from '@/components/ui-box/CourseLibrarySidebar.vue'
 import TrainingCourseCard from '@/components/course-list/training-course-card.vue'
 import AiRecommendModal from '@/components/modals/ai-recommend-modal.vue'
+import AiRecommendResultModal from '@/components/modals/ai-recommend-result-modal.vue'
 import { navigateBackOrReLaunch } from '@/utils/navigation.js'
+import { partTrainingCourses } from './course-data.js'
 
 const searchKeyword = ref('')
 const showAiRecommendModal = ref(false)
+const showAiRecommendResultModal = ref(false)
+const recommendedCourse = ref(null)
 
 const createFilterState = () => ({
 	gender: [],
@@ -107,161 +118,7 @@ const cloneFilters = (source) => ({
 const filters = ref(createFilterState())
 const appliedFilters = ref(createFilterState())
 
-/*
- * 课程库基础数据。
- * 每个课程对象都带筛选字段：
- * gender: all=全部，female=女性，male=男性
- * goal: fat-loss=减脂塑形，muscle=增肌增力，health=全面健康，wellness=健康养生，youth=适能训练
- * level: beginner=初级，intermediate=中级，advanced=高级
- * part: shoulder=肩部，chest=胸部，back=背部，arm=手臂，core=腹部，leg=臀腿，full-body=全身
- * method: resistance=有力臂，no-resistance=无力臂
- * durationRange: 0-15=<15分，15-25=15-25分，25-40=25-40分，40+=40分以上
- * equipment:
- *   short-bar=短杆，ankle-strap=脚环，triangle-handle=三角把，middle-bar=中杆，yoga-mat=瑜伽垫，
- *   lat-bar=横杆，foam-roller=泡沫轴，resistance-band=弹力带，dual-rope=两头绳，fitness-bench=健身椅
- */
-const courseList = ref([
-	{
-		id: 1,
-		title: '美人肩塑形',
-		duration: '15min',
-		cover: '/static/icons/partTrainingActivity/course_pic_01.jpg',
-		gender: 'female',
-		goal: 'fat-loss',
-		level: 'intermediate',
-		part: 'shoulder',
-		method: 'no-resistance',
-		durationRange: '15-25',
-		equipment: ['short-bar', 'fitness-bench'],
-		tags: ['减脂塑形', '中等', '三角肌后束']
-	},
-	{
-		id: 2,
-		title: '基础臀部塑形',
-		duration: '45min',
-		cover: '/static/icons/partTrainingActivity/course_pic_02.jpg',
-		gender: 'female',
-		goal: 'fat-loss',
-		level: 'advanced',
-		part: 'leg',
-		method: 'no-resistance',
-		durationRange: '40+',
-		equipment: ['ankle-strap', 'resistance-band'],
-		tags: ['塑形紧致', '较难', '臀大肌']
-	},
-	{
-		id: 3,
-		title: '肩部肌群训练',
-		duration: '25min',
-		cover: '/static/icons/partTrainingActivity/course_pic_03.jpg',
-		gender: 'male',
-		goal: 'muscle',
-		level: 'intermediate',
-		part: 'shoulder',
-		method: 'resistance',
-		durationRange: '15-25',
-		equipment: ['triangle-handle', 'middle-bar'],
-		tags: ['力量增强', '中等', '三角肌外侧']
-	},
-	{
-		id: 4,
-		title: '美背新训练',
-		duration: '30min',
-		cover: '/static/icons/partTrainingActivity/course_pic_04.jpg',
-		gender: 'female',
-		goal: 'wellness',
-		level: 'intermediate',
-		part: 'back',
-		method: 'resistance',
-		durationRange: '25-40',
-		equipment: ['lat-bar', 'dual-rope'],
-		tags: ['塑形紧致', '中等', '背阔肌']
-	},
-	{
-		id: 5,
-		title: '爆发腿部燃脂',
-		duration: '20min',
-		cover: '/static/icons/partTrainingActivity/course_pic_05.jpg',
-		gender: 'all',
-		goal: 'fat-loss',
-		level: 'advanced',
-		part: 'leg',
-		method: 'resistance',
-		durationRange: '15-25',
-		equipment: ['ankle-strap', 'dual-rope'],
-		tags: ['高效燃脂', '较难', '股四头肌']
-	},
-	{
-		id: 6,
-		title: '核心塑型进阶',
-		duration: '18min',
-		cover: '/static/icons/partTrainingActivity/course_pic_06.jpg',
-		gender: 'all',
-		goal: 'health',
-		level: 'intermediate',
-		part: 'core',
-		method: 'no-resistance',
-		durationRange: '15-25',
-		equipment: ['yoga-mat', 'foam-roller'],
-		tags: ['核心稳定', '中等', '腹横肌']
-	},
-	{
-		id: 7,
-		title: '蜜桃臀养成',
-		duration: '35min',
-		cover: '/static/icons/partTrainingActivity/course_pic_01.jpg',
-		gender: 'female',
-		goal: 'fat-loss',
-		level: 'intermediate',
-		part: 'leg',
-		method: 'no-resistance',
-		durationRange: '25-40',
-		equipment: ['ankle-strap', 'fitness-bench'],
-		tags: ['臀部塑形', '中等', '臀中肌']
-	},
-	{
-		id: 8,
-		title: '全身燃脂HIIT',
-		duration: '22min',
-		cover: '/static/icons/partTrainingActivity/course_pic_02.jpg',
-		gender: 'all',
-		goal: 'youth',
-		level: 'advanced',
-		part: 'full-body',
-		method: 'no-resistance',
-		durationRange: '15-25',
-		equipment: ['resistance-band', 'yoga-mat'],
-		tags: ['高效燃脂', '较难', '全身']
-	},
-	{
-		id: 9,
-		title: '手臂线条雕刻',
-		duration: '28min',
-		cover: '/static/icons/partTrainingActivity/course_pic_03.jpg',
-		gender: 'female',
-		goal: 'muscle',
-		level: 'intermediate',
-		part: 'arm',
-		method: 'resistance',
-		durationRange: '25-40',
-		equipment: ['short-bar', 'dual-rope'],
-		tags: ['力量增强', '中等', '肱二头肌']
-	},
-	{
-		id: 10,
-		title: '腹肌撕裂者',
-		duration: '16min',
-		cover: '/static/icons/partTrainingActivity/course_pic_04.jpg',
-		gender: 'male',
-		goal: 'muscle',
-		level: 'advanced',
-		part: 'core',
-		method: 'no-resistance',
-		durationRange: '15-25',
-		equipment: ['yoga-mat', 'fitness-bench'],
-		tags: ['核心强化', '较难', '腹直肌']
-	}
-])
+const courseList = ref(partTrainingCourses)
 
 const getFilterValues = (source, key) => source[key] || []
 
@@ -356,11 +213,111 @@ const handleOpenAiRecommend = () => {
 	showAiRecommendModal.value = true
 }
 
-const handleStartAiRecommend = () => {
+/*
+ * AI 推荐逻辑说明：
+ * 真正的“轻量推荐打分”写在当前页面 part-training.vue，
+ * 不写在 ai-recommend-modal.vue 里。
+ *
+ * 原因：
+ * 1. ai-recommend-modal.vue 只负责收集用户输入并把表单抛出来；
+ * 2. 课程总数据 courseList 也在当前页面更容易拿到；
+ * 3. 推荐结果弹窗、后续跳转也都由当前页面统一控制。
+ *
+ * 所以职责分工是：
+ * - ai-recommend-modal.vue：采集表单
+ * - part-training.vue：根据表单给课程打分并挑出推荐课
+ * - ai-recommend-result-modal.vue：展示推荐结果
+ */
+
+/*
+ * 当前这版不是“先硬筛选再推荐”，而是“遍历所有课程后给每门课打分”。
+ * 分数越高，说明这门课越接近用户在 AI 推荐弹窗里填写的条件。
+ *
+ * 当前参与打分的字段，全都来自 partTrainingCourses 里已经存在的课程字段：
+ * - gender
+ * - goal
+ * - part
+ * - level
+ * - method
+ *
+ * 对应的用户输入字段来自 AI 推荐弹窗表单：
+ * - form.gender
+ * - form.goal
+ * - form.part
+ * - form.level
+ * - form.method
+ *
+ * 注意：
+ * - 用户填写的 height / weight 目前还没有参与打分，只是先收集了表单值。
+ * - course.durationRange / equipment / coach 等字段目前都没有纳入 AI 推荐打分。
+ */
+const getAiRecommendationScore = (form, course) => {
+	let score = 0
+
+	// 性别完全匹配：+4；课程标记为 all：+2
+	if (course.gender === form.gender) {
+		score += 4
+	} else if (course.gender === 'all') {
+		score += 2
+	}
+
+	// 训练目的匹配：+5
+	if (course.goal === form.goal) {
+		score += 5
+	}
+
+	// 训练部位匹配：+5
+	if (course.part === form.part) {
+		score += 5
+	}
+
+	// 难度匹配：+3
+	if (course.level === form.level) {
+		score += 3
+	}
+
+	// 训练方式匹配：+2
+	if (course.method === form.method) {
+		score += 2
+	}
+
+	return score
+}
+
+// 把所有课程按得分从高到低排序，当前只取第一名作为推荐结果。
+// 如果后面要改成推荐 Top 3，这里就是最直接的改造入口。
+const getRecommendedCourse = (form) => {
+	const rankedCourses = [...courseList.value].sort((left, right) => {
+		const scoreDiff = getAiRecommendationScore(form, right) - getAiRecommendationScore(form, left)
+		if (scoreDiff !== 0) {
+			return scoreDiff
+		}
+
+		return left.id - right.id
+	})
+
+	return rankedCourses[0] || null
+}
+
+const handleStartAiRecommend = (form) => {
+	recommendedCourse.value = getRecommendedCourse(form)
 	showAiRecommendModal.value = false
-	uni.showToast({
-		title: 'AI分析功能开发中',
-		icon: 'none'
+
+	if (!recommendedCourse.value) {
+		uni.showToast({
+			title: '暂无可推荐课程',
+			icon: 'none'
+		})
+		return
+	}
+
+	showAiRecommendResultModal.value = true
+}
+
+const handleStartRecommendedCourse = (course) => {
+	showAiRecommendResultModal.value = false
+	uni.navigateTo({
+		url: '/pages/partTraining/warm-up-page?courseId=' + course.id
 	})
 }
 

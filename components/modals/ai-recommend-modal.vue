@@ -1,3 +1,17 @@
+<!--
+	产品语义说明：
+	这个组件对应用户点击“AI推荐”后，第一步看到的“基础信息弹窗”。
+	它不是结果页，而是推荐前的信息收集层。
+	
+	用户肉眼看到的内容包括：
+	1. 顶部蓝色提示条：“请填写以下信息，AI教练帮你推荐课程”
+	2. 基本信息表单
+	3. 性别、身高、体重、训练目的、训练部位、难度、训练方式
+	4. 底部“开始分析”按钮
+	
+	这个弹窗在产品上的作用不是让用户自己筛课，
+	而是让用户快速补充几个关键条件，好让系统帮他做一次推荐决策。
+-->
 <template>
 	<view v-if="visible" class="modal-overlay" @click="handleMaskClick">
 		<view class="modal-shell" @click.stop>
@@ -17,146 +31,164 @@
 			<view class="modal-card">
 				<text class="modal-title">基本信息</text>
 
-				<view class="section-block">
-					<text class="section-label">性别</text>
-					<view class="chip-row chip-row--compact">
-						<view
-							v-for="option in genderOptions"
-							:key="option.value"
-							class="choice-chip"
-							:class="{ 'choice-chip--active': form.gender === option.value }"
-							@click="setSingleChoice('gender', option.value)"
-						>
-							<text
-								class="choice-chip-text"
-								:class="{ 'choice-chip-text--active': form.gender === option.value }"
-							>
-								{{ option.label }}
-							</text>
-						</view>
-					</view>
-				</view>
-
-				<view class="section-block">
-					<view class="section-head">
-						<text class="section-label">身高</text>
-						<text class="section-unit">单位：cm</text>
-					</view>
-					<text class="metric-value">{{ form.height }}</text>
-					<view class="ruler-scale">
-						<view class="ruler-track">
+				<view class="modal-body">
+					<view class="section-block">
+						<text class="section-label">性别</text>
+						<view class="chip-row chip-row--compact">
 							<view
-								v-for="tick in heightTicks"
-								:key="'height-' + tick"
-								class="ruler-tick"
-								:class="{
-									'ruler-tick--major': tick % 5 === 0,
-									'ruler-tick--active': tick === heightActiveTick
-								}"
-							></view>
+								v-for="option in genderOptions"
+								:key="option.value"
+								class="choice-chip"
+								:class="{ 'choice-chip--active': form.gender === option.value }"
+								@click="setSingleChoice('gender', option.value)"
+							>
+								<text
+									class="choice-chip-text"
+									:class="{ 'choice-chip-text--active': form.gender === option.value }"
+								>
+									{{ option.label }}
+								</text>
+							</view>
 						</view>
-						<view class="ruler-indicator" :style="heightIndicatorStyle"></view>
 					</view>
-				</view>
 
-				<view class="section-block">
-					<view class="section-head">
-						<text class="section-label">体重</text>
-						<text class="section-unit">单位：KG</text>
+					<view class="section-block">
+						<view class="section-head">
+							<text class="section-label">身高</text>
+							<text class="section-unit">单位：cm</text>
+						</view>
+						<text class="metric-value">{{ form.height }}</text>
+						<view
+							id="height-ruler"
+							class="ruler-scale"
+							@click="handleRulerTap('height', $event)"
+							@touchstart.stop="handleRulerTouch('height', $event)"
+							@touchmove.stop.prevent="handleRulerTouch('height', $event)"
+						>
+							<view class="ruler-track">
+								<view
+									v-for="tick in heightTicks"
+									:key="'height-' + tick"
+									class="ruler-tick"
+									:class="{
+										'ruler-tick--major': tick % 5 === 0,
+										'ruler-tick--active': tick === heightActiveTick
+									}"
+								></view>
+							</view>
+							<view class="ruler-indicator" :style="heightIndicatorStyle">
+								<view class="ruler-indicator-dot"></view>
+							</view>
+						</view>
 					</view>
-					<text class="metric-value">{{ form.weight }}</text>
-					<view class="ruler-scale">
-						<view class="ruler-track">
+
+					<view class="section-block">
+						<view class="section-head">
+							<text class="section-label">体重</text>
+							<text class="section-unit">单位：KG</text>
+						</view>
+						<text class="metric-value">{{ form.weight }}</text>
+						<view
+							id="weight-ruler"
+							class="ruler-scale"
+							@click="handleRulerTap('weight', $event)"
+							@touchstart.stop="handleRulerTouch('weight', $event)"
+							@touchmove.stop.prevent="handleRulerTouch('weight', $event)"
+						>
+							<view class="ruler-track">
+								<view
+									v-for="tick in weightTicks"
+									:key="'weight-' + tick"
+									class="ruler-tick"
+									:class="{
+										'ruler-tick--major': tick % 5 === 0,
+										'ruler-tick--active': tick === weightActiveTick
+									}"
+								></view>
+							</view>
+							<view class="ruler-indicator" :style="weightIndicatorStyle">
+								<view class="ruler-indicator-dot"></view>
+							</view>
+						</view>
+					</view>
+
+					<view class="section-block">
+						<text class="section-label">训练目的</text>
+						<view class="chip-row">
 							<view
-								v-for="tick in weightTicks"
-								:key="'weight-' + tick"
-								class="ruler-tick"
-								:class="{
-									'ruler-tick--major': tick % 5 === 0,
-									'ruler-tick--active': tick === weightActiveTick
-								}"
-							></view>
-						</view>
-						<view class="ruler-indicator" :style="weightIndicatorStyle"></view>
-					</view>
-				</view>
-
-				<view class="section-block">
-					<text class="section-label">训练目的</text>
-					<view class="chip-row">
-						<view
-							v-for="option in goalOptions"
-							:key="option.value"
-							class="choice-chip"
-							:class="{ 'choice-chip--active': form.goal === option.value }"
-							@click="setSingleChoice('goal', option.value)"
-						>
-							<text
-								class="choice-chip-text"
-								:class="{ 'choice-chip-text--active': form.goal === option.value }"
+								v-for="option in goalOptions"
+								:key="option.value"
+								class="choice-chip"
+								:class="{ 'choice-chip--active': form.goal === option.value }"
+								@click="setSingleChoice('goal', option.value)"
 							>
-								{{ option.label }}
-							</text>
+								<text
+									class="choice-chip-text"
+									:class="{ 'choice-chip-text--active': form.goal === option.value }"
+								>
+									{{ option.label }}
+								</text>
+							</view>
 						</view>
 					</view>
-				</view>
 
-				<view class="section-block">
-					<text class="section-label">训练部位</text>
-					<view class="chip-row">
-						<view
-							v-for="option in partOptions"
-							:key="option.value"
-							class="choice-chip"
-							:class="{ 'choice-chip--active': form.part === option.value }"
-							@click="setSingleChoice('part', option.value)"
-						>
-							<text
-								class="choice-chip-text"
-								:class="{ 'choice-chip-text--active': form.part === option.value }"
+					<view class="section-block">
+						<text class="section-label">训练部位</text>
+						<view class="chip-row">
+							<view
+								v-for="option in partOptions"
+								:key="option.value"
+								class="choice-chip"
+								:class="{ 'choice-chip--active': form.part === option.value }"
+								@click="setSingleChoice('part', option.value)"
 							>
-								{{ option.label }}
-							</text>
+								<text
+									class="choice-chip-text"
+									:class="{ 'choice-chip-text--active': form.part === option.value }"
+								>
+									{{ option.label }}
+								</text>
+							</view>
 						</view>
 					</view>
-				</view>
 
-				<view class="section-block">
-					<text class="section-label">难度</text>
-					<view class="chip-row chip-row--compact">
-						<view
-							v-for="option in levelOptions"
-							:key="option.value"
-							class="choice-chip"
-							:class="{ 'choice-chip--active': form.level === option.value }"
-							@click="setSingleChoice('level', option.value)"
-						>
-							<text
-								class="choice-chip-text"
-								:class="{ 'choice-chip-text--active': form.level === option.value }"
+					<view class="section-block">
+						<text class="section-label">难度</text>
+						<view class="chip-row chip-row--compact">
+							<view
+								v-for="option in levelOptions"
+								:key="option.value"
+								class="choice-chip"
+								:class="{ 'choice-chip--active': form.level === option.value }"
+								@click="setSingleChoice('level', option.value)"
 							>
-								{{ option.label }}
-							</text>
+								<text
+									class="choice-chip-text"
+									:class="{ 'choice-chip-text--active': form.level === option.value }"
+								>
+									{{ option.label }}
+								</text>
+							</view>
 						</view>
 					</view>
-				</view>
 
-				<view class="section-block section-block--last">
-					<text class="section-label">训练方式</text>
-					<view class="chip-row chip-row--compact">
-						<view
-							v-for="option in methodOptions"
-							:key="option.value"
-							class="choice-chip"
-							:class="{ 'choice-chip--active': form.method === option.value }"
-							@click="setSingleChoice('method', option.value)"
-						>
-							<text
-								class="choice-chip-text"
-								:class="{ 'choice-chip-text--active': form.method === option.value }"
+					<view class="section-block section-block--last">
+						<text class="section-label">训练方式</text>
+						<view class="chip-row chip-row--compact">
+							<view
+								v-for="option in methodOptions"
+								:key="option.value"
+								class="choice-chip"
+								:class="{ 'choice-chip--active': form.method === option.value }"
+								@click="setSingleChoice('method', option.value)"
 							>
-								{{ option.label }}
-							</text>
+								<text
+									class="choice-chip-text"
+									:class="{ 'choice-chip-text--active': form.method === option.value }"
+								>
+									{{ option.label }}
+								</text>
+							</view>
 						</view>
 					</view>
 				</view>
@@ -172,7 +204,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue'
 
 const props = defineProps({
 	visible: {
@@ -239,6 +271,17 @@ const weightRange = {
 
 const heightTicks = Array.from({ length: 25 }, (_, index) => index)
 const weightTicks = Array.from({ length: 25 }, (_, index) => index)
+const rulerRects = ref({
+	height: {
+		left: 0,
+		width: 0
+	},
+	weight: {
+		left: 0,
+		width: 0
+	}
+})
+const instance = getCurrentInstance()
 
 const getIndicatorPercent = (value, range) => {
 	return ((value - range.min) / (range.max - range.min)) * 100
@@ -268,6 +311,67 @@ const setSingleChoice = (key, value) => {
 	form.value[key] = value
 }
 
+const getTouchClientX = (event) => {
+	const touch = event?.changedTouches?.[0] || event?.touches?.[0]
+	return touch?.clientX ?? event?.detail?.x ?? 0
+}
+
+const getMetricConfig = (type) => {
+	return type === 'height'
+		? { key: 'height', range: heightRange }
+		: { key: 'weight', range: weightRange }
+}
+
+const clampMetricValue = (value, range) => {
+	return Math.min(range.max, Math.max(range.min, value))
+}
+
+const updateMetricByPosition = (type, clientX) => {
+	const rect = rulerRects.value[type]
+	if (!rect || rect.width <= 0) {
+		return
+	}
+
+	const { key, range } = getMetricConfig(type)
+	const offsetX = Math.min(rect.width, Math.max(0, clientX - rect.left))
+	const ratio = offsetX / rect.width
+	const rawValue = range.min + ratio * (range.max - range.min)
+	form.value[key] = Math.round(clampMetricValue(rawValue, range))
+}
+
+const handleRulerTouch = (type, event) => {
+	updateMetricByPosition(type, getTouchClientX(event))
+}
+
+const handleRulerTap = (type, event) => {
+	updateMetricByPosition(type, getTouchClientX(event))
+}
+
+const measureRulers = () => {
+	if (!instance?.proxy) {
+		return
+	}
+
+	const query = uni.createSelectorQuery().in(instance.proxy)
+	query.select('#height-ruler').boundingClientRect()
+	query.select('#weight-ruler').boundingClientRect()
+	query.exec((rects) => {
+		if (rects?.[0]) {
+			rulerRects.value.height = {
+				left: rects[0].left,
+				width: rects[0].width
+			}
+		}
+
+		if (rects?.[1]) {
+			rulerRects.value.weight = {
+				left: rects[1].left,
+				width: rects[1].width
+			}
+		}
+	})
+}
+
 const handleClose = () => {
 	emit('update:visible', false)
 }
@@ -281,6 +385,19 @@ const handleStart = () => {
 		...form.value
 	})
 }
+
+watch(
+	() => props.visible,
+	async (visible) => {
+		if (!visible) {
+			return
+		}
+
+		await nextTick()
+		measureRulers()
+	},
+	{ immediate: true }
+)
 </script>
 
 <style scoped lang="scss">
@@ -331,7 +448,6 @@ const handleStart = () => {
 .modal-banner {
 	position: absolute;
 	top: 0;
-	left: 64rpx;
 	right: 0;
 	height: 68rpx;
 	padding: 0 94rpx 0 24rpx;
@@ -342,6 +458,8 @@ const handleStart = () => {
 	box-sizing: border-box;
 	z-index: 2;
 	box-shadow: 0 10rpx 24rpx rgba(76, 148, 236, 0.24);
+	width: auto;
+	max-width: 556rpx;
 }
 
 .modal-banner-text {
@@ -349,6 +467,7 @@ const handleStart = () => {
 	font-weight: 600;
 	color: #FFFFFF;
 	line-height: 1.3;
+	white-space: nowrap;
 }
 
 .modal-banner-avatar {
@@ -362,47 +481,55 @@ const handleStart = () => {
 .modal-card {
 	background: #FFFFFF;
 	border-radius: 30rpx;
-	padding: 32rpx 24rpx 22rpx;
+	padding: 26rpx 22rpx 20rpx;
 	box-sizing: border-box;
 	box-shadow: 0 22rpx 52rpx rgba(0, 0, 0, 0.16);
-	max-height: 78vh;
-	overflow-y: auto;
+	height: 78vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
 }
 
 .modal-title {
 	display: block;
 	text-align: center;
-	font-size: 30rpx;
+	font-size: 29rpx;
 	font-weight: 700;
 	color: #1F2937;
-	margin-bottom: 18rpx;
+	margin-bottom: 14rpx;
 }
 
 .section-block {
-	margin-bottom: 16rpx;
+	margin-bottom: 12rpx;
 }
 
 .section-block--last {
-	margin-bottom: 20rpx;
+	margin-bottom: 0;
+}
+
+.modal-body {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
 }
 
 .section-head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 6rpx;
+	margin-bottom: 4rpx;
 }
 
 .section-label {
 	display: block;
-	font-size: 24rpx;
+	font-size: 23rpx;
 	font-weight: 700;
 	color: #111827;
-	margin-bottom: 8rpx;
+	margin-bottom: 6rpx;
 }
 
 .section-unit {
-	font-size: 18rpx;
+	font-size: 17rpx;
 	font-weight: 600;
 	color: #374151;
 }
@@ -410,18 +537,18 @@ const handleStart = () => {
 .metric-value {
 	display: block;
 	text-align: center;
-	font-size: 30rpx;
+	font-size: 29rpx;
 	font-weight: 700;
 	color: #1F2937;
-	margin-bottom: 6rpx;
+	margin-bottom: 5rpx;
 }
 
 .ruler-scale {
 	position: relative;
-	height: 44rpx;
-	border-radius: 22rpx;
+	height: 50rpx;
+	border-radius: 25rpx;
 	background: #F3F4F6;
-	padding: 0 16rpx;
+	padding: 0 18rpx;
 	display: flex;
 	align-items: center;
 	box-sizing: border-box;
@@ -436,14 +563,14 @@ const handleStart = () => {
 
 .ruler-tick {
 	width: 3rpx;
-	height: 14rpx;
+	height: 13rpx;
 	border-radius: 999rpx;
 	background: #9CA3AF;
 	opacity: 0.92;
 }
 
 .ruler-tick--major {
-	height: 22rpx;
+	height: 20rpx;
 	background: #6B7280;
 }
 
@@ -453,30 +580,40 @@ const handleStart = () => {
 
 .ruler-indicator {
 	position: absolute;
-	top: 7rpx;
-	width: 4rpx;
-	height: 30rpx;
-	border-radius: 999rpx;
+	top: 5rpx;
+	width: 23rpx;
+	height: 40rpx;
+	border-radius: 12rpx;
 	background: #A3D63D;
 	transform: translateX(-50%);
-	box-shadow: 0 0 0 4rpx rgba(163, 214, 61, 0.12);
+	box-shadow: 0 6rpx 12rpx rgba(163, 214, 61, 0.22);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.ruler-indicator-dot {
+	width: 6rpx;
+	height: 19rpx;
+	border-radius: 999rpx;
+	background: rgba(255, 255, 255, 0.92);
 }
 
 .chip-row {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 10rpx;
+	gap: 9rpx;
 }
 
 .chip-row--compact {
-	gap: 12rpx;
+	gap: 8rpx;
 }
 
 .choice-chip {
-	min-width: 82rpx;
-	height: 38rpx;
-	padding: 0 14rpx;
-	border-radius: 19rpx;
+	min-width: 78rpx;
+	height: 35rpx;
+	padding: 0 12rpx;
+	border-radius: 18rpx;
 	background: #E5E7EB;
 	display: flex;
 	align-items: center;
@@ -489,7 +626,7 @@ const handleStart = () => {
 }
 
 .choice-chip-text {
-	font-size: 18rpx;
+	font-size: 17rpx;
 	font-weight: 600;
 	color: #9CA3AF;
 	line-height: 1;
@@ -500,21 +637,23 @@ const handleStart = () => {
 }
 
 .action-wrap {
-	padding: 0 100rpx;
+	padding: 0 96rpx;
+	margin-top: auto;
+	padding-top: 14rpx;
 }
 
 .action-button {
-	height: 60rpx;
-	border-radius: 30rpx;
+	height: 56rpx;
+	border-radius: 28rpx;
 	background: linear-gradient(180deg, #B5E74A 0%, #9DD738 100%);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	box-shadow: 0 10rpx 20rpx rgba(157, 215, 56, 0.22);
+	box-shadow: 0 8rpx 16rpx rgba(157, 215, 56, 0.2);
 }
 
 .action-button-text {
-	font-size: 28rpx;
+	font-size: 25rpx;
 	font-weight: 700;
 	color: #FFFFFF;
 }

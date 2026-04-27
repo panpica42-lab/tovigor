@@ -1,7 +1,14 @@
+<!--
+	产品语义说明：
+	这个组件对应用户肉眼看到的“课程详情主体界面”。
+	它用于部位训练里点击课程卡片后进入的详情页，负责渲染课程标题、封面图、标签与时长、
+	课程简介、注意事项、动作预览，以及底部“开始训练”按钮这一整块内容。
+	如果后续 AI 推荐结果弹窗要复用课程详情展示，复用的也应该主要是这一块内容。
+-->
 <template>
-	<view class="course-detail">
+	<view class="course-detail" :class="{ 'course-detail--embedded': embedded }">
 		<!-- 顶部导航栏 -->
-		<view class="header">
+		<view v-if="showHeader" class="header">
 			<CommonBackButton class="back-btn-position" />
 			<text class="header-title">{{ course.title }}</text>
 		</view>
@@ -26,7 +33,7 @@
 						装饰性彩色横线（橙红色渐变） intro-line
 						卡片标题文字："课程简介"  intro-title
 						卡片正文内容：显示课程的详细介绍文字  intro-text -->
-					<view class="intro-card">
+					<view v-if="showIntroCard" class="intro-card">
 						<view class="intro-line"></view>
 						<text class="intro-title">课程简介</text>
 						<text class="intro-text">{{ course.intro }}</text>
@@ -116,14 +123,50 @@ import CommonBackButton from '@/components/ui-box/common-back-button.vue'
 
 // 接收 props
 const props = defineProps({
+	// 当前要展示的课程对象。
+	// 也就是用户此刻正在看的那一门课程的完整信息。
 	course: {
 		type: Object,
 		required: true
+	},
+	// 是否显示页面顶部那一行“返回按钮 + 标题”。
+	// 独立详情页需要显示，弹窗里的推荐结果不需要显示。
+	showHeader: {
+		type: Boolean,
+		default: true
+	},
+	// 是否显示封面图右上角那张“课程简介”小浮卡。
+	// 独立详情页显示会比较完整；弹窗里为了更像设计稿，先关掉。
+	showIntroCard: {
+		type: Boolean,
+		default: true
+	},
+	// embedded = 嵌入模式。
+	// 产品上它表示：这份课程详情内容不是作为“一个完整独立页面”出现，
+	// 而是被“装进别的容器里”显示，比如 AI 推荐结果弹窗。
+	//
+	// embedded 为 false：
+	// 用户看到的是正常详情页，点“开始训练”后组件自己负责跳转。
+	//
+	// embedded 为 true：
+	// 用户看到的是弹窗里的详情内容，组件只负责把内容画出来，
+	// 点击“开始训练”时不自己跳转，而是把事件抛给外层弹窗或页面处理。
+	embedded: {
+		type: Boolean,
+		default: false
 	}
 })
+const emit = defineEmits(['start'])
 
 // 开始训练
 const startTraining = () => {
+	// 嵌入模式下，这个组件只负责显示内容，不直接做页面跳转。
+	// 让外层弹窗/页面决定后续动作，职责更清晰。
+	if (props.embedded) {
+		emit('start', props.course)
+		return
+	}
+
 	console.log('开始训练课程:', props.course.title)
 	// 跳转到热身页面
 	uni.navigateTo({
@@ -139,6 +182,12 @@ const startTraining = () => {
 	background-color: #F5F5F5;
 	display: flex;
 	flex-direction: column;
+}
+
+.course-detail--embedded {
+	height: 100%;
+	min-height: auto;
+	background-color: transparent;
 }
 
 /* 顶部导航栏 */
@@ -464,5 +513,123 @@ const startTraining = () => {
 	font-size: 28rpx;
 	font-weight: 700;
 	color: #FFFFFF;
+}
+
+.course-detail--embedded .content {
+	padding: 0;
+	overflow: hidden;
+}
+
+.course-detail--embedded .cover-card {
+	margin-top: 0;
+	margin-bottom: 12rpx;
+}
+
+.course-detail--embedded .cover-section {
+	padding-bottom: 45%;
+	border-radius: 18rpx;
+	box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+}
+
+.course-detail--embedded .tags-duration-overlay {
+	bottom: 8rpx;
+	left: 8rpx;
+	right: 8rpx;
+	padding: 8rpx 10rpx;
+	border-radius: 16rpx;
+}
+
+.course-detail--embedded .tag-item {
+	font-size: 19rpx;
+}
+
+.course-detail--embedded .tag-divider {
+	height: 20rpx;
+	margin: 0 8rpx;
+}
+
+.course-detail--embedded .duration-text {
+	font-size: 21rpx;
+}
+
+.course-detail--embedded .notice-card {
+	margin-bottom: 12rpx;
+	padding: 16rpx 18rpx;
+	border-radius: 18rpx;
+}
+
+.course-detail--embedded .notice-header {
+	margin-bottom: 10rpx;
+}
+
+.course-detail--embedded .notice-icon {
+	width: 28rpx;
+	height: 28rpx;
+	margin-right: 8rpx;
+}
+
+.course-detail--embedded .notice-icon::after {
+	font-size: 16rpx;
+}
+
+.course-detail--embedded .notice-title {
+	font-size: 23rpx;
+}
+
+.course-detail--embedded .notice-list {
+	gap: 6rpx;
+}
+
+.course-detail--embedded .notice-number {
+	font-size: 19rpx;
+}
+
+.course-detail--embedded .notice-content {
+	font-size: 19rpx;
+	line-height: 1.35;
+}
+
+.course-detail--embedded .bottom-content {
+	flex: 1;
+	overflow: hidden;
+}
+
+.course-detail--embedded .preview-section {
+	flex: none;
+}
+
+.course-detail--embedded .preview-title {
+	font-size: 23rpx;
+	margin-bottom: 10rpx;
+}
+
+.course-detail--embedded .preview-list {
+	flex: none;
+	gap: 10rpx;
+}
+
+.course-detail--embedded .preview-image {
+	height: 98rpx;
+	aspect-ratio: auto;
+	margin-bottom: 5rpx;
+}
+
+.course-detail--embedded .preview-name {
+	font-size: 17rpx;
+}
+
+.course-detail--embedded .bottom-bar {
+	padding: 16rpx 0 0;
+	padding-bottom: 0;
+	background-color: transparent;
+}
+
+.course-detail--embedded .start-btn {
+	height: 66rpx;
+	border-radius: 33rpx;
+}
+
+.course-detail--embedded .start-btn-text {
+	font-size: 27rpx;
 }
 </style>
