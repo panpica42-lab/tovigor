@@ -122,11 +122,16 @@
 		<view class="course-section">
 			<view class="section-header">
 				<text class="section-title">课程推荐</text>
-				<view class="serial-test-btn" @click="goToSerialTest">
-					<text class="serial-test-text">串口v1</text>
-				</view>
-				<view class="serial-test-btn serial-test-btn-v2" @click="goToSerialTestV2">
-					<text class="serial-test-text">串口v2</text>
+				<view class="debug-buttons">
+					<view class="serial-test-btn light-strip-btn" @click="goToLightStripControl">
+						<text class="serial-test-text">灯带控制</text>
+					</view>
+					<view class="serial-test-btn" @click="goToSerialTest">
+						<text class="serial-test-text">串口v1</text>
+					</view>
+					<view class="serial-test-btn serial-test-btn-v2" @click="goToSerialTestV2">
+						<text class="serial-test-text">串口v2</text>
+					</view>
 				</view>
 			</view>
 
@@ -228,6 +233,14 @@ const controlStates = ref({
 })
 
 const toggleControl = (key) => {
+	if (key === 'wifi') {
+		controlStates.value.wifi = true
+		uni.navigateTo({
+			url: '/pages/system/wifi'
+		})
+		return
+	}
+
 	controlStates.value[key] = !controlStates.value[key]
 }
 
@@ -274,6 +287,13 @@ const goToSmartAssess = () => {
 const goToSerialTest = () => {
 	uni.navigateTo({
 		url: '/pages/serial-test/serial-test'
+	})
+}
+
+// 跳转到灯带控制页面
+const goToLightStripControl = () => {
+	uni.navigateTo({
+		url: '/pages/serial-test/light-strip-control'
 	})
 }
 
@@ -596,6 +616,13 @@ page {
 	color: #FFFFFF;
 }
 
+.debug-buttons {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	margin-left: auto;
+}
+
 .serial-test-btn {
 	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 	border-radius: 50rpx;
@@ -605,6 +632,10 @@ page {
 
 .serial-test-btn-v2 {
 	background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+}
+
+.light-strip-btn {
+	background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
 }
 
 .serial-test-text {

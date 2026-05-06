@@ -27,6 +27,15 @@
 			}
 		},
 		{
+			"path": "pages/system/wifi",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
 			"path": "pages/freeTraining/free-training-intro",
 			"style": {
 				"navigationBarTitleText": "",
@@ -193,6 +202,12 @@
 			"path": "pages/serial-test/serial-test-v2",
 			"style": {
 				"navigationBarTitleText": "串口测试 v2"
+			}
+		},
+		{
+			"path": "pages/serial-test/light-strip-control",
+			"style": {
+				"navigationBarTitleText": "灯带控制"
 			}
 		},
 		{
