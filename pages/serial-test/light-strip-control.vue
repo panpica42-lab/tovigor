@@ -13,7 +13,7 @@
 			</view>
 			<view class="info-row">
 				<text class="label">串口参数</text>
-				<text class="value">115200 / 8 / 1 / none</text>
+				<text class="value">{{ serialParamsText }}</text>
 			</view>
 			<view class="status-card" :class="{ connected: isConnected }">
 				<text class="status-dot"></text>
@@ -90,9 +90,11 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
 import lightStripService from '@/utils/lightStripService.js'
-import { LIGHT_STRIP_DEVICE_PATH } from '@/utils/serialConfig.js'
+import { SERIAL_DEVICES } from '@/utils/serialConfig.js'
 
-const devicePath = LIGHT_STRIP_DEVICE_PATH
+const lightStripConfig = SERIAL_DEVICES.lightStrip
+const devicePath = lightStripConfig.path
+const serialParamsText = `${lightStripConfig.baudRate} / ${lightStripConfig.dataBits} / ${lightStripConfig.stopBits} / ${lightStripConfig.parity}`
 const ADDRESS_BROADCAST = 0x00
 const ADDRESS_DEFAULT = 0x55
 const isConnected = ref(false)

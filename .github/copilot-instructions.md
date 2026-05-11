@@ -10,7 +10,7 @@
 
 ### 技术栈
 - **框架**: uni-app Vue 3 (Composition API)
-- **构建工具**: HBuilderX + @dcloudio/uni-cli
+- **构建工具**: HBuilderX + @dcloudio/uni-cli          
 - **平台**: Android App (app-android)，H5 仅用于调试
 - **原生集成**: UTS (TypeScript-like) 插件系统 + Kotlin AAR 库
 

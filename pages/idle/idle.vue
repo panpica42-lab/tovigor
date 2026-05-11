@@ -3,7 +3,7 @@
 	<view class="idle-page">
 		<video
 			class="bg-video"
-			src="/static/icons/ads/idle.mp4"
+			src="/static/icons/partTrainingActivity/startTraining/vedio-placeHolder.mp4"
 			autoplay
 			loop
 			muted

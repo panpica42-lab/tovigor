@@ -164,6 +164,68 @@
 			v-model:visible="showGuideModal"
 			:guide-items="guideItems"
 		/>
+
+		<view
+			v-if="showBrightnessModal"
+			class="brightness-mask"
+			@click="closeBrightnessModal"
+		>
+			<view class="brightness-modal" @click.stop>
+				<view class="brightness-header">
+					<text class="brightness-title">亮度</text>
+				</view>
+
+				<view class="brightness-card">
+					<view class="brightness-slider-row">
+						<text class="brightness-side-icon">☀</text>
+						<slider
+							class="brightness-slider"
+							:value="brightnessValue"
+							:min="0"
+							:max="100"
+							:step="1"
+							activeColor="#9dd532"
+							backgroundColor="#ffffff"
+							block-color="#9dd532"
+							:block-size="20"
+							@changing="handleBrightnessChanging"
+							@change="handleBrightnessChange"
+						/>
+						<text class="brightness-side-icon right">☼</text>
+						<text class="brightness-value">{{ brightnessValue }}</text>
+					</view>
+				</view>
+
+				<view class="brightness-mode-row">
+					<view
+						class="brightness-mode-item"
+						:class="{ active: brightnessMode === 'eyeCare' }"
+						@click="applyBrightnessMode('eyeCare')"
+					>
+						<text class="brightness-mode-text">护眼模式</text>
+						<switch
+							:checked="brightnessMode === 'eyeCare'"
+							color="#9dd532"
+							style="transform:scale(0.72)"
+							disabled
+						/>
+					</view>
+					<view
+						class="brightness-mode-item"
+						:class="{ active: brightnessMode === 'dark' }"
+						@click="applyBrightnessMode('dark')"
+					>
+						<text class="brightness-mode-text">深色模式</text>
+						<switch
+							:checked="brightnessMode === 'dark'"
+							color="#9dd532"
+							style="transform:scale(0.72)"
+							disabled
+						/>
+					</view>
+				</view>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -221,6 +283,11 @@ const guideItems = ref([
 const showUsageGuide = () => {
 	showGuideModal.value = true
 }
+const showBrightnessModal = ref(false)
+const brightnessValue = ref(60)
+const brightnessMode = ref('')
+const lastAppliedBrightnessValue = ref(null)
+let brightnessApplyTimer = null
 
 // 控制面板状态
 const controlStates = ref({
@@ -232,7 +299,131 @@ const controlStates = ref({
 	power: false
 })
 
+const syncBrightnessValue = () => {
+	// #ifdef APP-PLUS
+	if (typeof plus !== 'undefined' && plus.screen && typeof plus.screen.getBrightness === 'function') {
+		const currentValue = Math.max(0, Math.min(100, Math.round((plus.screen.getBrightness() || 0) * 100)))
+		brightnessValue.value = currentValue
+		lastAppliedBrightnessValue.value = currentValue
+		return
+	}
+	// #endif
+
+	uni.getScreenBrightness({
+		success: (res) => {
+			const currentValue = Math.max(0, Math.min(100, Math.round((res.value || 0) * 100)))
+			brightnessValue.value = currentValue
+			lastAppliedBrightnessValue.value = currentValue
+		},
+		fail: () => {
+			brightnessValue.value = 60
+			lastAppliedBrightnessValue.value = 60
+		}
+	})
+}
+
+const applyBrightnessValue = (value) => {
+	const safeValue = Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
+	if (lastAppliedBrightnessValue.value === safeValue) {
+		brightnessValue.value = safeValue
+		return
+	}
+
+	const normalized = Math.max(0, Math.min(1, safeValue / 100))
+
+	// #ifdef APP-PLUS
+	if (typeof plus !== 'undefined' && plus.screen && typeof plus.screen.setBrightness === 'function') {
+		plus.screen.setBrightness(normalized)
+		brightnessValue.value = safeValue
+		lastAppliedBrightnessValue.value = safeValue
+		return
+	}
+	// #endif
+
+	uni.setScreenBrightness({
+		value: normalized,
+		success: () => {
+			brightnessValue.value = safeValue
+			lastAppliedBrightnessValue.value = safeValue
+		},
+		fail: () => {
+			uni.showToast({
+				title: '当前环境暂不支持亮度调节',
+				icon: 'none'
+			})
+		}
+	})
+}
+
+const setBrightnessValue = (value, immediate = false) => {
+	const safeValue = Math.max(0, Math.min(100, Math.round(Number(value) || 0)))
+	brightnessValue.value = safeValue
+
+	if (immediate) {
+		if (brightnessApplyTimer) {
+			clearTimeout(brightnessApplyTimer)
+			brightnessApplyTimer = null
+		}
+		applyBrightnessValue(safeValue)
+		return
+	}
+
+	if (brightnessApplyTimer) {
+		clearTimeout(brightnessApplyTimer)
+	}
+
+	brightnessApplyTimer = setTimeout(() => {
+		brightnessApplyTimer = null
+		applyBrightnessValue(safeValue)
+	}, 16)
+}
+
+const openBrightnessModal = () => {
+	controlStates.value.light = true
+	showBrightnessModal.value = true
+	syncBrightnessValue()
+}
+
+const closeBrightnessModal = () => {
+	showBrightnessModal.value = false
+	controlStates.value.light = false
+}
+
+const handleBrightnessChanging = (event) => {
+	setBrightnessValue(event.detail.value)
+}
+
+const handleBrightnessChange = (event) => {
+	setBrightnessValue(event.detail.value, true)
+}
+
+const applyBrightnessMode = (mode) => {
+	const nextMode = brightnessMode.value === mode ? '' : mode
+	brightnessMode.value = nextMode
+
+	if (nextMode === 'eyeCare') {
+		setBrightnessValue(38)
+		return
+	}
+
+	if (nextMode === 'dark') {
+		setBrightnessValue(18)
+		return
+	}
+
+	syncBrightnessValue()
+}
+
 const toggleControl = (key) => {
+	if (key === 'light') {
+		if (showBrightnessModal.value) {
+			closeBrightnessModal()
+		} else {
+			openBrightnessModal()
+		}
+		return
+	}
+
 	if (key === 'wifi') {
 		controlStates.value.wifi = true
 		uni.navigateTo({
@@ -313,6 +504,7 @@ const goToFlappyBird = () => {
 
 onMounted(() => {
 	calcScrollHeight()
+	syncBrightnessValue()
 	// 监听窗口尺寸变化（仅 H5/APP 生效，无小程序依赖）
 	if (uni.onWindowResize) {
 		resizeHandler = () => calcScrollHeight()
@@ -321,6 +513,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+	if (brightnessApplyTimer) {
+		clearTimeout(brightnessApplyTimer)
+		brightnessApplyTimer = null
+	}
 	if (uni.offWindowResize && resizeHandler) {
 		uni.offWindowResize(resizeHandler)
 	}
@@ -408,6 +604,109 @@ page {
 .usage-guide-btn:active {
 	opacity: 0.7;
 	transform: scale(0.95);
+}
+
+.brightness-mask {
+	position: fixed;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 50;
+	background: rgba(0, 0, 0, 0.06);
+}
+
+.brightness-modal {
+	position: absolute;
+	top: 104rpx;
+	right: 30rpx;
+	width: 620rpx;
+	padding: 30rpx 26rpx 24rpx;
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 244, 244, 0.98) 100%);
+	border-radius: 34rpx;
+	box-shadow:
+		0 18rpx 48rpx rgba(0, 0, 0, 0.12),
+		inset 0 2rpx 0 rgba(255, 255, 255, 0.92);
+	backdrop-filter: blur(12rpx);
+}
+
+.brightness-header {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 24rpx;
+}
+
+.brightness-title {
+	font-size: 34rpx;
+	font-weight: bold;
+	color: #111111;
+}
+
+.brightness-card {
+	padding: 24rpx 20rpx;
+	background: linear-gradient(180deg, #ececec 0%, #e1e1e1 100%);
+	border-radius: 28rpx;
+	box-shadow:
+		inset 0 2rpx 8rpx rgba(255, 255, 255, 0.85),
+		0 6rpx 18rpx rgba(0, 0, 0, 0.06);
+}
+
+.brightness-slider-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.brightness-side-icon {
+	width: 32rpx;
+	font-size: 24rpx;
+	text-align: center;
+	color: #7d7d7d;
+}
+
+.brightness-side-icon.right {
+	color: #ffffff;
+	text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.18);
+}
+
+.brightness-slider {
+	flex: 1;
+	margin: 0 10rpx;
+}
+
+.brightness-value {
+	width: 52rpx;
+	margin-left: 8rpx;
+	font-size: 24rpx;
+	font-weight: 600;
+	color: #4a4a4a;
+	text-align: right;
+}
+
+.brightness-mode-row {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	gap: 56rpx;
+	margin-top: 28rpx;
+}
+
+.brightness-mode-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+
+.brightness-mode-item.active .brightness-mode-text {
+	color: #111111;
+	font-weight: bold;
+}
+
+.brightness-mode-text {
+	margin-bottom: 8rpx;
+	font-size: 24rpx;
+	color: #4d4d4d;
 }
 
 .title-main {

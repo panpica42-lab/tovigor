@@ -29,15 +29,15 @@ import {
   listDevices,
   getVersion
 } from '@/uni_modules/wzl-serialbridge'
-import { SERIAL_DEVICE_PATH, SERIAL_BAUD_RATE } from '@/utils/serialConfig.js'
+import { SERIAL_DEVICES } from '@/utils/serialConfig.js'
 
 // ============================================================================
 // 运行时状态
 // ============================================================================
 
 const DEFAULT_CONFIG = {
-  path: SERIAL_DEVICE_PATH,
-  baudRate: SERIAL_BAUD_RATE,
+  path: SERIAL_DEVICES.motor.path,
+  baudRate: SERIAL_DEVICES.motor.baudRate,
   dataBits: 8,
   stopBits: 1,
   parity: 'none'
@@ -590,7 +590,7 @@ export function ensureConnected(options = {}) {
 /**
  * 连接串口
  * @param {object} options - 连接选项
- * @param {string} options.path - 设备路径，默认取 utils/serialConfig.js 中的 SERIAL_DEVICE_PATH
+ * @param {string} options.path - 设备路径，默认取 utils/serialConfig.js 中的 SERIAL_DEVICES.motor.path
  * @param {number} options.baudRate - 波特率，默认 115200
  * @param {number} options.dataBits - 数据位，默认 8
  * @param {number} options.stopBits - 停止位，默认 1
