@@ -168,6 +168,15 @@
 			}
 		},
 		{
+			"path": "pages/smartAssess/body-strength-assess/strength-result",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"disableScroll": true,
+				"bounce": "none"
+			}
+		},
+		{
 			"path": "pages/smartAssess/body-strength-assess/strength-assess",
 			"style": {
 				"navigationBarTitleText": "",

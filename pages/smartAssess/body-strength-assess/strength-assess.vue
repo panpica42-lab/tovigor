@@ -2,6 +2,62 @@
  * 力量评估页面 - 跳过步骤1（部位选择）
  * 功能：部位力量评估 - 训练部位选择
  * 结构：全屏背景图 + 浮层控件
+ *
+ * 评估定位（产品语义）：
+ * - 这不是“检测用户绝对力量”，而是“标准阻力下的完成能力评估”
+ * - 系统先按部位输出一个固定评估阻力，再根据用户拉绳峰值行程，映射出推荐训练值
+ * - 最终输出 3 个结果：热身值、训练值、冲刺值
+ *
+ * 默认评估力量值（产品初始值 / 标准评估阻力，单位kg）：
+ * - 肩部：15
+ * - 胸部：20
+ * - 背部：25
+ * - 手臂：15
+ * - 臀部：25
+ * - 腿部：25
+ *
+ * 第一版伪算法：
+ * 1. 用户选择部位后，系统读取该部位的默认评估力量值 baseForce
+ * 2. 点击“开始评估”后，设备按 baseForce 输出固定阻力
+ * 3. 用户完成一次标准拉绳动作
+ * 4. 第一版只看本次动作的峰值行程 peakDistanceCm，不做姿态识别，不做稳定性识别
+ * 5. 以 90cm 作为理论满行程，以 80cm 作为“完成标准动作”的主要判断基准
+ * 6. 根据 peakDistanceCm 所在区间，先计算推荐训练值 trainingValue
+ * 7. 再由训练值得到：
+ *    - 热身值 warmupValue = trainingValue * 80%
+ *    - 冲刺值 sprintValue = trainingValue 对应的更高档位建议
+ * 8. 所有结果不显示小数，统一吸附到最近档位
+ *
+ * 行程区间规则（按峰值行程判断）：
+ * - peakDistanceCm >= 80：
+ *   说明可完整完成标准动作
+ *   trainingValue = baseForce * 130%
+ *   sprintValue = baseForce * 160%
+ * - 60 <= peakDistanceCm < 80：
+ *   说明大部分完成，当前阻力基本匹配
+ *   trainingValue = baseForce * 100%
+ *   sprintValue = baseForce * 125%
+ * - 40 <= peakDistanceCm < 60：
+ *   说明只能部分完成，当前阻力偏高
+ *   trainingValue = baseForce * 80%
+ *   sprintValue = baseForce * 100%
+ * - 20 <= peakDistanceCm < 40：
+ *   说明明显吃力，当前阻力过高
+ *   trainingValue = baseForce * 60%
+ *   sprintValue = baseForce * 80%
+ * - peakDistanceCm < 20：
+ *   说明几乎无法完成动作
+ *   trainingValue = baseForce * 40%
+ *   sprintValue = baseForce * 60%
+ *
+ * 热身值规则：
+ * - warmupValue = trainingValue * 80%
+ * - 热身值同样需要吸附到最近档位
+ *
+ * 档位吸附规则：
+ * - 结果不显示小数，计算结束后统一吸附到最近档位
+ * - 当前建议档位池：8 / 10 / 12 / 15 / 20 / 25 / 30（单位kg）
+ * - 页面展示时输出：热身值 / 训练值 / 冲刺值
  -->
 <template>
 	<view class="page">
@@ -72,19 +128,22 @@
 		<!-- 力量柱状图区域（下一行，均匀分布） -->
 		<view class="strength-bars-section" :style="{ top: (statusBarHeight + 88 + 160) + 'px' }">
 			<StrengthBarCard 
-				label="最大值" 
+				label="第1-2次" 
 				:values="strengthData.card1" 
-				:maxValue="100" 
+				:maxValue="90"
+				unit="CM"
 			/>
 			<StrengthBarCard 
-				label="最大值" 
+				label="第3-4次" 
 				:values="strengthData.card2" 
-				:maxValue="100" 
+				:maxValue="90"
+				unit="CM"
 			/>
 			<StrengthBarCard 
-				label="最大值" 
+				label="第5-6次" 
 				:values="strengthData.card3" 
-				:maxValue="100" 
+				:maxValue="90"
+				unit="CM"
 			/>
 		</view>
 		
@@ -148,7 +207,7 @@
 		<AssessmentCompleteModal 
 			v-model:visible="showCompleteModal"
 			:currentPartId="selectedPartId"
-			nextPartId="chest"
+			:nextPartId="nextPartId"
 			:countdownSeconds="5"
 			@start="handleStartNext"
 			@cancel="handleCancelNext"
@@ -173,6 +232,13 @@ import BubbleDialogBox from '@/components/ui-box/bubble-dialog-box.vue'
 import CoachDetailModal from '@/components/coach/coach-detail-modal-vue.vue'
 import StrengthBarCard from './components/strength-bar-card.vue'
 import { getSelectedCoach, setSelectedCoach } from '@/utils/coachManager.js'
+import {
+	STRENGTH_ASSESS_STORAGE_KEY,
+	getBodyParts,
+	getDefaultStrengthOverview,
+	PART_BASE_FORCE_MAP,
+	buildStrengthResult
+} from './strength-assess-config.js'
 
 // ========== 串口通信服务 ==========
 import { 
@@ -180,7 +246,6 @@ import {
 	off, 
 	startWorking, 
 	stopForce,
-	updateWorkingForce,
 	getStatus 
 } from '@/utils/serialService.js'
 
@@ -234,6 +299,10 @@ const coachBadgeBackground = computed(() => selectedCoach.value?.badgeBackground
 // 教练选择弹窗状态
 const showCoachModal = ref(false)
 
+// 部位数据
+const bodyParts = ref(getBodyParts())
+const selectedPartId = ref('shoulder')
+
 // ========== 力量数据（3个卡片，每卡片2个柱子）==========
 const strengthData = reactive({
 	card1: [0, 0],  // 第一个卡片的两个力量条
@@ -244,16 +313,168 @@ const strengthData = reactive({
 // ========== 串口通信 ==========
 const serialConnected = ref(false)
 const isAssessing = ref(false)  // 是否正在评估中
+const hasNextPart = computed(() => {
+	const currentIndex = bodyParts.value.findIndex(part => part.id === selectedPartId.value)
+	return currentIndex > -1 && currentIndex < bodyParts.value.length - 1
+})
+const nextPartId = computed(() => {
+	const currentIndex = bodyParts.value.findIndex(part => part.id === selectedPartId.value)
+	if (currentIndex === -1) {
+		return bodyParts.value[0]?.id || 'shoulder'
+	}
+	return bodyParts.value[currentIndex + 1]?.id || bodyParts.value[currentIndex]?.id || 'shoulder'
+})
+
+const assessState = reactive({
+	lastCount: null,
+	currentPeakDistanceMm: 0,
+	completedRepCount: 0,
+	repDistancesCm: []
+})
+
+let completeModalTimer = null
+let stopForceTimer = null
+
+const resetStrengthBars = () => {
+	strengthData.card1[0] = 0
+	strengthData.card1[1] = 0
+	strengthData.card2[0] = 0
+	strengthData.card2[1] = 0
+	strengthData.card3[0] = 0
+	strengthData.card3[1] = 0
+}
+
+const resetAssessState = () => {
+	assessState.lastCount = null
+	assessState.currentPeakDistanceMm = 0
+	assessState.completedRepCount = 0
+	assessState.repDistancesCm = []
+	resetStrengthBars()
+}
+
+const clearFinishTimers = () => {
+	if (completeModalTimer) {
+		clearTimeout(completeModalTimer)
+		completeModalTimer = null
+	}
+	if (stopForceTimer) {
+		clearTimeout(stopForceTimer)
+		stopForceTimer = null
+	}
+}
+
+const setDistanceBarValue = (repIndex, distanceCm) => {
+	const safeDistance = Math.max(0, Math.round(distanceCm))
+	if (repIndex === 0) strengthData.card1[0] = safeDistance
+	if (repIndex === 1) strengthData.card1[1] = safeDistance
+	if (repIndex === 2) strengthData.card2[0] = safeDistance
+	if (repIndex === 3) strengthData.card2[1] = safeDistance
+	if (repIndex === 4) strengthData.card3[0] = safeDistance
+	if (repIndex === 5) strengthData.card3[1] = safeDistance
+}
+
+const loadStoredOverview = () => {
+	const stored = uni.getStorageSync(STRENGTH_ASSESS_STORAGE_KEY)
+	if (stored && typeof stored === 'object') {
+		return {
+			...getDefaultStrengthOverview(),
+			...stored
+		}
+	}
+	return getDefaultStrengthOverview()
+}
+
+const saveCurrentPartResult = () => {
+	const currentPartId = selectedPartId.value
+	const peakDistanceCm = assessState.repDistancesCm.length
+		? Math.max(...assessState.repDistancesCm)
+		: 0
+	const overview = loadStoredOverview()
+
+	overview[currentPartId] = buildStrengthResult(
+		currentPartId,
+		peakDistanceCm,
+		assessState.repDistancesCm
+	)
+
+	uni.setStorageSync(STRENGTH_ASSESS_STORAGE_KEY, overview)
+	console.log('[skip1] 已保存部位评估结果:', currentPartId, overview[currentPartId])
+}
+
+const goToOverviewPage = () => {
+	uni.redirectTo({
+		url: '/pages/smartAssess/body-strength-assess/strength-result'
+	})
+}
+
+const finishCurrentAssessment = () => {
+	saveCurrentPartResult()
+	clearFinishTimers()
+	console.log('[skip1] 当前部位6次动作完成，1秒后弹出完成弹窗')
+
+	completeModalTimer = setTimeout(() => {
+		completeModalTimer = null
+		showCompleteModal.value = true
+		console.log('[skip1] 当前部位评估完成，已弹出完成弹窗')
+
+		stopForceTimer = setTimeout(() => {
+			stopForceTimer = null
+			stopForce()
+			isAssessing.value = false
+			console.log('[skip1] 完成弹窗显示2秒后，已停止设备阻力')
+		}, 2000)
+	}, 1000)
+}
+
+const commitRepPeakDistance = () => {
+	if (assessState.completedRepCount >= 6) {
+		return
+	}
+
+	const peakDistanceCm = assessState.currentPeakDistanceMm / 10
+	setDistanceBarValue(assessState.completedRepCount, peakDistanceCm)
+	assessState.repDistancesCm.push(peakDistanceCm)
+	assessState.completedRepCount += 1
+	assessState.currentPeakDistanceMm = 0
+
+	console.log('[skip1] 记录动作峰值行程:', {
+		rep: assessState.completedRepCount,
+		peakDistanceCm: Math.round(peakDistanceCm)
+	})
+
+	if (assessState.completedRepCount >= 6) {
+		finishCurrentAssessment()
+	}
+}
+
+const moveToNextPart = ({ autoStart = false } = {}) => {
+	if (!hasNextPart.value) {
+		goToOverviewPage()
+		return {
+			navigatedToOverview: true,
+			nextPartName: ''
+		}
+	}
+
+	selectedPartId.value = nextPartId.value
+	resetAssessState()
+	console.log('[skip1] 切换到下一个部位:', selectedPartId.value)
+
+	if (autoStart) {
+		handleStartAssess({ silentToast: true })
+	}
+
+	return {
+		navigatedToOverview: false,
+		nextPartName: bodyParts.value.find(p => p.id === selectedPartId.value)?.name || ''
+	}
+}
 
 // 处理接收到的帧数据
 const handleFrame = (data) => {
 	const frame = data.parsed
 	
 	if (frame.type === 'A9') {
-		// 更新力量柱状图数据
-		strengthData.card1[0] = frame.left.instantForce
-		strengthData.card1[1] = frame.right.instantForce
-		
 		// 更新调试面板数据
 		if (DEBUG_PANEL_VISIBLE) {
 			debugData.setForce = frame.setForce
@@ -264,11 +485,39 @@ const handleFrame = (data) => {
 			debugData.rightCount = frame.right.count
 			debugData.rightForce = frame.right.instantForce
 		}
-		
-		console.log('[skip1] 收到力量数据:', 
-			'左手', frame.left.instantForce, 'kg',
-			'右手', frame.right.instantForce, 'kg'
-		)
+
+		if (isAssessing.value) {
+			const currentDistanceMm = Math.max(frame.left.distance, frame.right.distance, 0)
+			const currentCount = Math.max(frame.left.count, frame.right.count)
+
+			// 设备 count 是历史累计值，评估开始后的第一帧只用于建立本次基线。
+			if (assessState.lastCount === null) {
+				assessState.lastCount = currentCount
+				assessState.currentPeakDistanceMm = 0
+				console.log('[skip1] 建立评估次数基线:', currentCount)
+				return
+			}
+
+			if (currentCount < assessState.lastCount) {
+				assessState.lastCount = currentCount
+				assessState.currentPeakDistanceMm = 0
+				console.log('[skip1] 次数回退，重置评估次数基线:', currentCount)
+				return
+			}
+
+			assessState.currentPeakDistanceMm = Math.max(
+				assessState.currentPeakDistanceMm,
+				currentDistanceMm
+			)
+
+			if (currentCount > assessState.lastCount) {
+				const increment = currentCount - assessState.lastCount
+				for (let i = 0; i < increment && assessState.completedRepCount < 6; i++) {
+					commitRepPeakDistance()
+				}
+				assessState.lastCount = currentCount
+			}
+		}
 	}
 }
 
@@ -288,14 +537,13 @@ const initSerial = () => {
 }
 
 // 处理开始评估按钮点击
-/**
- * TODO: 评估流程待完善
- * 1. 开始评估按钮是通信开启的开关，页面创建时不会尝试建立连接而是检查连接状态
- * 2. 不会直接开始串口通信而是等待开始评估按钮这个开关打开
- * 3. 打开之后的通信逻辑还没有添加（如何填满三组柱状图）
- * 4. 结束标志也没有添加（何时认为评估完成、如何触发完成弹窗）
- */
-const handleStartAssess = () => {
+// 当前流程：
+// 1. 按部位读取默认评估阻力并启动工作状态
+// 2. 首帧 A9 回包建立本次评估的历史 count 基线
+// 3. 后续 A9 回包按左右手最大距离累计单次动作峰值
+// 4. 当最大次数计数递增时，结算一次峰值行程并写入 6 个柱子之一
+// 5. 6 次柱状图全部填满后，停止输出并弹出完成弹窗
+const handleStartAssess = ({ silentToast = false } = {}) => {
 	if (isAssessing.value) {
 		console.log('[skip1] 已在评估中，忽略重复点击')
 		return
@@ -308,27 +556,38 @@ const handleStartAssess = () => {
 		})
 		return
 	}
+
+	showCompleteModal.value = false
+	clearFinishTimers()
+	resetAssessState()
+
+	const baseForce = PART_BASE_FORCE_MAP[selectedPartId.value] || 0
 	
 	// 启动工作状态：周期发送指令 + 轮询读取
 	// 参数：力量值(kg), 力量模式(1=恒力), 发送间隔(ms)
-	startWorking(0, 1, 200)
+	startWorking(baseForce, 1, 200)
 	isAssessing.value = true
 	
-	uni.showToast({
-		title: `开始${bodyParts.value.find(p => p.id === selectedPartId.value)?.name || ''}评估`,
-		icon: 'none'
-	})
-	console.log('[skip1] 开始评估，已启动串口工作状态')
+	if (!silentToast) {
+		uni.showToast({
+			title: `开始${bodyParts.value.find(p => p.id === selectedPartId.value)?.name || ''}评估`,
+			icon: 'none'
+		})
+	}
+	console.log('[skip1] 开始评估，已启动串口工作状态, force:', baseForce)
 }
 
 // 清理串口资源
 const cleanupSerial = () => {
+	clearFinishTimers()
+
 	// 取消订阅
 	off('frame', handleFrame)
 	
 	// 停止工作状态（停止发送和轮询，但不断开连接）
 	stopForce()
 	isAssessing.value = false
+	resetAssessState()
 	
 	console.log('[skip1] 串口资源已清理')
 }
@@ -348,17 +607,6 @@ const handleCoachSelect = (coachData) => {
 	})
 }
 
-// 部位数据
-const bodyParts = ref([
-	{ id: 'shoulder', name: '肩部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_shoulder.svg' },
-	{ id: 'chest', name: '胸部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_chest.svg' },
-	{ id: 'back', name: '背部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_back.svg' },
-	{ id: 'arm', name: '手臂', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_arm.svg' },
-	{ id: 'hip', name: '臀部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_hip.svg' },
-	{ id: 'leg', name: '腿部', icon: '/static/icons/smartAssessActivity/li-liang/ic_muscle_leg.svg' }
-])
-const selectedPartId = ref('shoulder')
-
 // 返回上一页
 const goBack = () => {
 	uni.navigateBack()
@@ -366,7 +614,16 @@ const goBack = () => {
 
 // 选择部位
 const selectPart = (partId) => {
+	if (isAssessing.value) {
+		uni.showToast({
+			title: '评估进行中，暂不可切换部位',
+			icon: 'none'
+		})
+		return
+	}
+
 	selectedPartId.value = partId
+	resetAssessState()
 	console.log('选中部位:', partId)
 	
 	uni.showToast({
@@ -389,8 +646,12 @@ const handleThumbnailClick = () => {
 // 处理"直接开始"
 const handleStartNext = (data) => {
 	console.log('点击直接开始:', data)
+	clearFinishTimers()
+	stopForce()
+	isAssessing.value = false
+	const result = moveToNextPart({ autoStart: true })
 	uni.showToast({
-		title: `开始${bodyParts.value.find(p => p.id === data.nextPartId)?.name || ''}评估`,
+		title: result.navigatedToOverview ? '已进入评估总览' : `开始${result.nextPartName}评估`,
 		icon: 'none'
 	})
 }
@@ -398,17 +659,21 @@ const handleStartNext = (data) => {
 // 处理"取消"
 const handleCancelNext = () => {
 	console.log('点击取消')
-	uni.showToast({
-		title: '已取消跳转',
-		icon: 'none'
-	})
+	clearFinishTimers()
+	stopForce()
+	isAssessing.value = false
+	goToOverviewPage()
 }
 
 // 处理倒计时结束
 const handleTimeout = () => {
 	console.log('倒计时结束，自动跳转')
+	clearFinishTimers()
+	stopForce()
+	isAssessing.value = false
+	const result = moveToNextPart({ autoStart: true })
 	uni.showToast({
-		title: '自动跳转下一部位',
+		title: result.navigatedToOverview ? '已进入评估总览' : `自动开始${result.nextPartName}评估`,
 		icon: 'none'
 	})
 }

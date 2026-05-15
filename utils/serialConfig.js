@@ -39,7 +39,7 @@ export const SERIAL_BOARD_PRESETS = {
 }
 
 // 可选值：'3568' | '3576'
-export const ACTIVE_SERIAL_BOARD = '3576'
+export const ACTIVE_SERIAL_BOARD = '3568'
 
 const activeBoardConfig = SERIAL_BOARD_PRESETS[ACTIVE_SERIAL_BOARD]
 

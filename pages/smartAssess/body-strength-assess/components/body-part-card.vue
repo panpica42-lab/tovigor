@@ -3,7 +3,7 @@
  * 显示单个身体部位的力量评估数据
  -->
 <template>
-	<view class="part-card" :class="positionClass">
+	<view class="part-card" :class="[positionClass, { 'part-card-highlighted': highlighted }]">
 		<!-- 主信息行 -->
 		<view class="main-row">
 			<text class="part-name">{{ name }}</text>
@@ -47,6 +47,10 @@ const props = defineProps({
 	position: {
 		type: String,
 		default: 'left'
+	},
+	highlighted: {
+		type: Boolean,
+		default: false
 	}
 })
 
@@ -71,12 +75,19 @@ const formatSubValue = (value) => {
 	display: flex;
 	flex-direction: column;
 	background: rgba(255, 255, 255, 0.95);
-	border-radius: 10rpx;
+	border-radius: 16rpx;
 	padding: 10rpx 14rpx;
-	box-shadow: 0 3rpx 12rpx rgba(0, 0, 0, 0.08);
-	min-width: 150rpx;
-	transform: scale(0.85);
+	box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.12);
+	min-width: 184rpx;
+	transform: scale(0.82);
 	transform-origin: center center;
+	border: 2rpx solid rgba(255, 255, 255, 0.8);
+}
+
+.part-card.part-card-highlighted {
+	background: linear-gradient(180deg, #F7FFE7 0%, #FFFFFF 100%);
+	border-color: rgba(154, 203, 38, 0.65);
+	box-shadow: 0 10rpx 24rpx rgba(141, 196, 0, 0.18);
 }
 
 /* 左侧卡片 - 左对齐 */
@@ -97,7 +108,7 @@ const formatSubValue = (value) => {
 	align-items: baseline;
 	justify-content: space-between;
 	width: 100%;
-	margin-bottom: 6rpx;
+	margin-bottom: 8rpx;
 }
 
 .part-name {
@@ -107,7 +118,7 @@ const formatSubValue = (value) => {
 }
 
 .part-weight {
-	font-size: 24rpx;
+	font-size: 26rpx;
 	font-weight: bold;
 	color: #4CAF50;
 }
@@ -115,7 +126,7 @@ const formatSubValue = (value) => {
 .sub-items {
 	display: flex;
 	flex-direction: row;
-	gap: 12rpx;
+	gap: 8rpx;
 }
 
 .sub-item {
@@ -123,15 +134,19 @@ const formatSubValue = (value) => {
 	flex-direction: column;
 	align-items: center;
 	gap: 2rpx;
+	padding: 6rpx 8rpx;
+	border-radius: 10rpx;
+	background: #F0F0F0;
 }
 
 .sub-label {
-	font-size: 18rpx;
-	color: #999999;
+	font-size: 16rpx;
+	color: #7D7D7D;
 }
 
 .sub-value {
-	font-size: 18rpx;
-	color: #666666;
+	font-size: 16rpx;
+	font-weight: 600;
+	color: #444444;
 }
 </style>

@@ -60,7 +60,7 @@
 				</view>
 				<!-- <image class="title-icon" src="/static/icons/homeActivity/trimming.png" mode="aspectFill"></image> -->
 			</view>
-			<text class="title-sub">Tovigor的健身世界，活力一触即发！</text>
+			<text class="title-sub">wochovy的健身世界，活力一触即发！</text>
 		</view>
 
 		<!-- 主功能区容器 -->
