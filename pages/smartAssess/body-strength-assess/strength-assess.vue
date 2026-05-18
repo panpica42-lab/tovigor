@@ -246,6 +246,9 @@ import {
 	off, 
 	startWorking, 
 	stopForce,
+	updateWorkingForce,
+	sendOnce,
+	isWorking,
 	getStatus 
 } from '@/utils/serialService.js'
 
@@ -333,7 +336,6 @@ const assessState = reactive({
 })
 
 let completeModalTimer = null
-let stopForceTimer = null
 
 const resetStrengthBars = () => {
 	strengthData.card1[0] = 0
@@ -357,10 +359,18 @@ const clearFinishTimers = () => {
 		clearTimeout(completeModalTimer)
 		completeModalTimer = null
 	}
-	if (stopForceTimer) {
-		clearTimeout(stopForceTimer)
-		stopForceTimer = null
+}
+
+const applyAssessForce = (force, { seamless = false } = {}) => {
+	if (seamless && isWorking()) {
+		updateWorkingForce(force, 1)
+		sendOnce(force, 1)
+		console.log('[skip1] 无缝切换评估阻力:', force)
+		return
 	}
+
+	startWorking(force, 1, 200)
+	console.log('[skip1] 启动评估阻力:', force)
 }
 
 const setDistanceBarValue = (repIndex, distanceCm) => {
@@ -415,14 +425,7 @@ const finishCurrentAssessment = () => {
 	completeModalTimer = setTimeout(() => {
 		completeModalTimer = null
 		showCompleteModal.value = true
-		console.log('[skip1] 当前部位评估完成，已弹出完成弹窗')
-
-		stopForceTimer = setTimeout(() => {
-			stopForceTimer = null
-			stopForce()
-			isAssessing.value = false
-			console.log('[skip1] 完成弹窗显示2秒后，已停止设备阻力')
-		}, 2000)
+		console.log('[skip1] 当前部位评估完成，已弹出完成弹窗，保持当前阻力等待下一步')
 	}, 1000)
 }
 
@@ -447,7 +450,7 @@ const commitRepPeakDistance = () => {
 	}
 }
 
-const moveToNextPart = ({ autoStart = false } = {}) => {
+const moveToNextPart = ({ autoStart = false, seamless = false } = {}) => {
 	if (!hasNextPart.value) {
 		goToOverviewPage()
 		return {
@@ -461,7 +464,7 @@ const moveToNextPart = ({ autoStart = false } = {}) => {
 	console.log('[skip1] 切换到下一个部位:', selectedPartId.value)
 
 	if (autoStart) {
-		handleStartAssess({ silentToast: true })
+		handleStartAssess({ silentToast: true, seamless })
 	}
 
 	return {
@@ -543,7 +546,7 @@ const initSerial = () => {
 // 3. 后续 A9 回包按左右手最大距离累计单次动作峰值
 // 4. 当最大次数计数递增时，结算一次峰值行程并写入 6 个柱子之一
 // 5. 6 次柱状图全部填满后，停止输出并弹出完成弹窗
-const handleStartAssess = ({ silentToast = false } = {}) => {
+const handleStartAssess = ({ silentToast = false, seamless = false } = {}) => {
 	if (isAssessing.value) {
 		console.log('[skip1] 已在评估中，忽略重复点击')
 		return
@@ -563,9 +566,8 @@ const handleStartAssess = ({ silentToast = false } = {}) => {
 
 	const baseForce = PART_BASE_FORCE_MAP[selectedPartId.value] || 0
 	
-	// 启动工作状态：周期发送指令 + 轮询读取
-	// 参数：力量值(kg), 力量模式(1=恒力), 发送间隔(ms)
-	startWorking(baseForce, 1, 200)
+	// 首次开始时启动工作状态；跨部位自动开始时保持工作态并无缝改力。
+	applyAssessForce(baseForce, { seamless })
 	isAssessing.value = true
 	
 	if (!silentToast) {
@@ -574,7 +576,7 @@ const handleStartAssess = ({ silentToast = false } = {}) => {
 			icon: 'none'
 		})
 	}
-	console.log('[skip1] 开始评估，已启动串口工作状态, force:', baseForce)
+	console.log('[skip1] 开始评估, force:', baseForce, 'seamless:', seamless)
 }
 
 // 清理串口资源
@@ -647,9 +649,8 @@ const handleThumbnailClick = () => {
 const handleStartNext = (data) => {
 	console.log('点击直接开始:', data)
 	clearFinishTimers()
-	stopForce()
 	isAssessing.value = false
-	const result = moveToNextPart({ autoStart: true })
+	const result = moveToNextPart({ autoStart: true, seamless: true })
 	uni.showToast({
 		title: result.navigatedToOverview ? '已进入评估总览' : `开始${result.nextPartName}评估`,
 		icon: 'none'
@@ -669,9 +670,8 @@ const handleCancelNext = () => {
 const handleTimeout = () => {
 	console.log('倒计时结束，自动跳转')
 	clearFinishTimers()
-	stopForce()
 	isAssessing.value = false
-	const result = moveToNextPart({ autoStart: true })
+	const result = moveToNextPart({ autoStart: true, seamless: true })
 	uni.showToast({
 		title: result.navigatedToOverview ? '已进入评估总览' : `自动开始${result.nextPartName}评估`,
 		icon: 'none'
