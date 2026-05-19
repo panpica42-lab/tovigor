@@ -420,6 +420,16 @@ const goToOverviewPage = () => {
 const finishCurrentAssessment = () => {
 	saveCurrentPartResult()
 	clearFinishTimers()
+
+	if (!hasNextPart.value) {
+		stopForce()
+		isAssessing.value = false
+		showCompleteModal.value = false
+		console.log('[skip1] 最后一个部位评估完成，直接进入评估结果页')
+		goToOverviewPage()
+		return
+	}
+
 	console.log('[skip1] 当前部位6次动作完成，1秒后弹出完成弹窗')
 
 	completeModalTimer = setTimeout(() => {
@@ -452,6 +462,9 @@ const commitRepPeakDistance = () => {
 
 const moveToNextPart = ({ autoStart = false, seamless = false } = {}) => {
 	if (!hasNextPart.value) {
+		stopForce()
+		isAssessing.value = false
+		showCompleteModal.value = false
 		goToOverviewPage()
 		return {
 			navigatedToOverview: true,

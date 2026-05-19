@@ -129,7 +129,8 @@ const handlePlay = () => {
 
 /* 信息区域 */
 .info {
-  padding: 10rpx 12rpx 4rpx; 
+  min-height: 56rpx;
+  padding: 12rpx 12rpx 10rpx; 
 }
 
 .title-row {
@@ -137,7 +138,7 @@ const handlePlay = () => {
   align-items: center;
   justify-content: space-between;
   display: flex;
-  margin-bottom: -10rpx;
+  margin-bottom: 6rpx;
 }
 
 .title {
@@ -146,13 +147,13 @@ const handlePlay = () => {
   font-weight: 600;
   color: #111111;
   margin-right: 10rpx;
-  line-height: 1.1;
+  line-height: 1.25;
 }
 
 .duration {
   font-size: 18rpx;
   color: #111111;
-  line-height: 1.1;
+  line-height: 1.25;
 }
 
 /* 标签行 */
@@ -167,7 +168,7 @@ const handlePlay = () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.1;
+  line-height: 1.25;
 }
 </style>
 

@@ -34,11 +34,9 @@
 			<view class="control-panel-content" :style="fullScreenStyle">
 				<view class="control-buttons">
 					<view class="control-btn control-btn-side" @click="handlePrevStep">
-						<image
-							class="control-btn-icon control-btn-icon-side"
-							src="/static/icons/general/btn_last_step.svg"
-							mode="aspectFit"
-						></image>
+						<view class="step-nav-icon">
+							<text class="step-nav-arrow">«</text>
+						</view>
 						<text class="control-btn-text">练前热身</text>
 					</view>
 
@@ -51,11 +49,9 @@
 					</view>
 
 					<view class="control-btn control-btn-side" @click="handleNextStep">
-						<image
-							class="control-btn-icon control-btn-icon-side"
-							src="/static/icons/general/btn_next_step.svg"
-							mode="aspectFit"
-						></image>
+						<view class="step-nav-icon">
+							<text class="step-nav-arrow">»</text>
+						</view>
 						<text class="control-btn-text">练后拉伸</text>
 					</view>
 				</view>
@@ -850,9 +846,23 @@ export default {
 	width: 180rpx;
 }
 
-.control-btn-icon-side {
+.step-nav-icon {
 	width: 90rpx;
 	height: 90rpx;
+	border-radius: 45rpx;
+	background-color: rgba(255, 255, 255, 0.28);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.7);
+	align-items: center;
+	justify-content: center;
+}
+
+.step-nav-arrow {
+	margin-top: -6rpx;
+	font-size: 66rpx;
+	font-weight: 300;
+	color: #FFFFFF;
 }
 
 .control-btn-icon-center {

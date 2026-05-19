@@ -109,7 +109,7 @@
 		<!-- 训练完成弹窗 -->
 		<TrainingCompleteWindow
 			v-model:visible="isFinishModalVisible"
-			@confirm="closeFinishModal"
+			@close="closeFinishModal"
 		/>
 		
 	</view>

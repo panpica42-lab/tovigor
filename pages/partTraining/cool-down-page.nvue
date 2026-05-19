@@ -32,11 +32,9 @@
 			<view class="control-panel-content" :style="fullScreenStyle">
 				<view class="control-buttons">
 					<view class="control-btn control-btn-side" @click="handlePrevStep">
-						<image
-							class="control-btn-icon control-btn-icon-side"
-							src="/static/icons/general/btn_last_step.svg"
-							mode="aspectFit"
-						></image>
+						<view class="step-nav-icon">
+							<text class="step-nav-arrow">«</text>
+						</view>
 						<text class="control-btn-text">正式训练</text>
 					</view>
 
@@ -49,11 +47,9 @@
 					</view>
 
 					<view class="control-btn control-btn-side" @click="handleNextStep">
-						<image
-							class="control-btn-icon control-btn-icon-side"
-							src="/static/icons/general/btn_next_step.svg"
-							mode="aspectFit"
-						></image>
+						<view class="step-nav-icon">
+							<text class="step-nav-arrow">»</text>
+						</view>
 						<text class="control-btn-text">训练完成</text>
 					</view>
 				</view>
@@ -108,7 +104,7 @@
 		</view>
 
 		<view v-if="isFinishModalVisible" class="finish-modal-overlay" :style="fullScreenStyle">
-			<view class="finish-modal-mask" :style="fullScreenStyle" @click="hideFinishModal"></view>
+			<view class="finish-modal-mask" :style="fullScreenStyle"></view>
 			<view class="finish-modal-card">
 				<view class="finish-modal-top">
 					<view class="finish-handle-bar"></view>
@@ -128,19 +124,11 @@
 						mode="aspectFit"
 					></image>
 					<text class="finish-hint-bottom">扫描二维码登录小程序查询训练报告总结</text>
-
-					<view class="finish-confirm-btn" @click="handleFinishConfirm">
-						<text class="finish-confirm-text">返回训练列表</text>
-					</view>
 				</view>
+			</view>
 
-				<view class="finish-close-btn" @click="hideFinishModal">
-					<image
-						class="finish-close-icon"
-						src="/static/icons/general/btn_general_close.svg"
-						mode="aspectFit"
-					></image>
-				</view>
+			<view class="finish-close-btn" @click="handleFinishConfirm">
+				<text class="finish-close-mark">×</text>
 			</view>
 		</view>
 	</view>
@@ -605,9 +593,23 @@ export default {
 	width: 180rpx;
 }
 
-.control-btn-icon-side {
+.step-nav-icon {
 	width: 90rpx;
 	height: 90rpx;
+	border-radius: 45rpx;
+	background-color: rgba(255, 255, 255, 0.28);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.7);
+	align-items: center;
+	justify-content: center;
+}
+
+.step-nav-arrow {
+	margin-top: -6rpx;
+	font-size: 66rpx;
+	font-weight: 300;
+	color: #FFFFFF;
 }
 
 .control-btn-icon-center {
@@ -689,11 +691,11 @@ export default {
 }
 
 .finish-modal-bottom {
-	padding-top: 28rpx;
-	padding-bottom: 32rpx;
+	height: 320rpx;
 	padding-left: 38rpx;
 	padding-right: 38rpx;
 	align-items: center;
+	justify-content: center;
 	border-bottom-left-radius: 32rpx;
 	border-bottom-right-radius: 32rpx;
 }
@@ -716,36 +718,22 @@ export default {
 	line-height: 30rpx;
 	text-align: center;
 	color: #999999;
-	margin-bottom: 28rpx;
-}
-
-.finish-confirm-btn {
-	width: 100%;
-	height: 84rpx;
-	align-items: center;
-	justify-content: center;
-	background-color: #FFA200;
-	border-radius: 42rpx;
-}
-
-.finish-confirm-text {
-	font-size: 28rpx;
-	font-weight: bold;
-	color: #FFFFFF;
 }
 
 .finish-close-btn {
-	position: absolute;
-	right: 20rpx;
-	top: 20rpx;
-	width: 40rpx;
-	height: 40rpx;
+	width: 64rpx;
+	height: 64rpx;
+	margin-top: 32rpx;
+	border-radius: 32rpx;
+	background-color: rgba(255, 255, 255, 0.96);
 	align-items: center;
 	justify-content: center;
 }
 
-.finish-close-icon {
-	width: 32rpx;
-	height: 32rpx;
+.finish-close-mark {
+	font-size: 58rpx;
+	line-height: 58rpx;
+	font-weight: 300;
+	color: #000000;
 }
 </style>

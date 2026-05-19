@@ -1,14 +1,14 @@
 <!--
  * 训练完成弹窗组件
- * 功能：训练结束后展示完成状态及统计数据，提供返回首页操作
- * 结构：上下均等两半（上：橙色渐变+标题+装饰物 / 下：白色+数据+按钮）+ 游离关闭按钮
+ * 功能：训练结束后展示完成状态和扫码入口，由父页面处理关闭后的返回流程
+ * 结构：上下均等两半（上：橙色渐变+标题+装饰物 / 下：白色+二维码）+ 游离关闭按钮
  * 用法：
  *   <TrainingCompleteWindow
  *     v-model:visible="isFinishModalVisible"
  *     :duration="'12:35'"
  *     :calories="320"
  *     :completedSets="6"
- *     @confirm="handleConfirm"
+ *     @close="handleClose"
  *   />
  -->
 <template>
@@ -51,11 +51,7 @@
 			
 			<!-- 游离关闭按钮（在卡片下方居中） -->
 			<view class="floating-close-btn" @click="handleClose">
-				<image
-					class="close-icon"
-					src="/static/icons/general/btn_general_close.svg"
-					mode="aspectFit"
-				/>
+				<text class="close-mark">×</text>
 			</view>
 		</view>
 	</view>
@@ -77,18 +73,12 @@ const props = defineProps({
 	}
 })
 
-const emit = defineEmits(['update:visible', 'confirm', 'close'])
+const emit = defineEmits(['update:visible', 'close'])
 
-// 关闭弹窗（不触发确认逻辑）
+// 关闭弹窗，具体返回逻辑交给父页面处理
 const handleClose = () => {
 	emit('update:visible', false)
 	emit('close')
-}
-
-// 点击"返回首页"按钮
-const handleConfirm = () => {
-	emit('update:visible', false)
-	emit('confirm')
 }
 
 // 点击遮罩层
@@ -226,23 +216,24 @@ const handleOverlayClick = () => {
 
 /* ========== 游离关闭按钮 ========== */
 .floating-close-btn {
-	width: 58rpx;
-	height: 58rpx;
+	width: 64rpx;
+	height: 64rpx;
 	border-radius: 50%;
-	border: 4rpx solid rgba(255, 255, 255, 0.6);
-	background: transparent;
+	background: rgba(255, 255, 255, 0.96);
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.18);
 }
 
 .floating-close-btn:active {
 	transform: scale(0.9);
-	border-color: rgba(255, 255, 255, 0.9);
 }
 
-.close-icon {
-	width: 38rpx;
-	height: 38rpx;
+.close-mark {
+	font-size: 58rpx;
+	line-height: 58rpx;
+	font-weight: 300;
+	color: #000000;
 }
 </style>

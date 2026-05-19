@@ -143,15 +143,20 @@
 				:style="{ height: scrollHeight + 'px' }"
 			>
 				<view class="course-grid">
-					<view class="course-item" v-for="(course, index) in courseList" :key="index">
+					<view
+						class="course-item"
+						v-for="course in courseList"
+						:key="course.id"
+						@click="handleCourseClick(course)"
+					>
 						<view class="course-image-wrapper">
-							<image class="course-image" :src="course.image" mode="aspectFill"></image>
+							<image class="course-image" :src="course.cover" mode="aspectFill"></image>
 							<view class="play-btn">
 								<view class="play-triangle"></view>
 							</view>
 						</view>
 						<view class="course-info">
-							<text class="course-name">{{ course.name }}</text>
+							<text class="course-name">{{ course.title }}</text>
 							<text class="course-duration">{{ course.duration }}</text>
 						</view>
 					</view>
@@ -232,34 +237,9 @@
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 import UsageGuideModal from '@/components/modals/usage-guide-modal.vue'
+import { partTrainingCourses } from '@/pages/partTraining/course-data.js'
 
-const courseList = ref([
-	{
-		image: '/static/icons/partTrainingActivity/ic_1x.jpg',
-		name: '肩部塑形训练',
-		duration: '25min'
-	},
-	{
-		image: '/static/icons/partTrainingActivity/ic_2x.jpg',
-		name: '核心力量训练',
-		duration: '30min'
-	},
-	{
-		image: '/static/icons/partTrainingActivity/ic_4x.jpg',
-		name: '有氧燃脂训练',
-		duration: '20min'
-	},
-	{
-		image: '/static/logo.png',
-		name: '腿部训练课程',
-		duration: '35min'
-	},
-	{
-		image: '/static/logo.png',
-		name: '背部强化训练',
-		duration: '28min'
-	}
-])
+const courseList = ref(partTrainingCourses)
 const scrollHeight = ref(0)
 let resizeHandler = null
 
@@ -464,6 +444,12 @@ const goToFreeTraining = () => {
 const goToPartTraining = () => {
 	uni.navigateTo({
 		url: '/pages/partTraining/part-training'
+	})
+}
+
+const handleCourseClick = (course) => {
+	uni.navigateTo({
+		url: '/pages/partTraining/course-detail-adapter?id=' + course.id
 	})
 }
 

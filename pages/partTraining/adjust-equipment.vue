@@ -205,8 +205,11 @@ const startTraining = () => {
 
 <style scoped lang="scss">
 .page {
-  min-height: 100vh;
+  height: 100vh;
   background: #f2f3f5;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* 顶部栏 */
@@ -233,6 +236,8 @@ const startTraining = () => {
 }
 
 .content {
+  flex: 1;
+  min-height: 0;
   padding: 16rpx 24rpx 0;
 }
 
@@ -397,6 +402,7 @@ const startTraining = () => {
 
 /* 底部按钮托盘 */
 .bottom-bar {
+  flex-shrink: 0;
   padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
   background: #f2f3f5;
 }

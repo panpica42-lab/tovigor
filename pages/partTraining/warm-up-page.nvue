@@ -42,11 +42,9 @@
 					</view>
 
 					<view class="control-btn control-btn-side" @click="handleNextStep">
-						<image
-							class="control-btn-icon control-btn-icon-side"
-							src="/static/icons/general/btn_next_step.svg"
-							mode="aspectFit"
-						></image>
+						<view class="next-step-icon">
+							<text class="next-step-arrow">»</text>
+						</view>
 						<text class="control-btn-text">下一环节</text>
 					</view>
 				</view>
@@ -537,9 +535,23 @@ export default {
 	width: 180rpx;
 }
 
-.control-btn-icon-side {
+.next-step-icon {
 	width: 90rpx;
 	height: 90rpx;
+	border-radius: 45rpx;
+	background-color: rgba(255, 255, 255, 0.28);
+	border-width: 2rpx;
+	border-style: solid;
+	border-color: rgba(255, 255, 255, 0.7);
+	align-items: center;
+	justify-content: center;
+}
+
+.next-step-arrow {
+	margin-top: -6rpx;
+	font-size: 66rpx;
+	font-weight: 300;
+	color: #FFFFFF;
 }
 
 .control-btn-icon-center {

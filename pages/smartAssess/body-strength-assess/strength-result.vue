@@ -104,6 +104,11 @@
 				</scroll-view>
 			</view>
 		</view>
+
+		<TrainingCompleteWindow
+			v-model:visible="showTrainingCompleteWindow"
+			@close="handleTrainingCompleteClose"
+		/>
 	</view>
 </template>
 
@@ -112,6 +117,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import BodyPartCard from './components/body-part-card.vue'
 import CommonBackButton from '@/components/ui-box/common-back-button.vue'
+import TrainingCompleteWindow from '@/components/modals/training-complete-window.vue'
 import { partTrainingCourses } from '@/pages/partTraining/course-data.js'
 import {
 	STRENGTH_ASSESS_STORAGE_KEY,
@@ -121,6 +127,7 @@ import {
 const statusBarHeight = ref(0)
 const visibleCourses = partTrainingCourses.slice(0, 8)
 const moreArrowText = '>>'
+const showTrainingCompleteWindow = ref(false)
 
 const partsData = reactive({
 	shoulder: createDisplayPart(),
@@ -174,9 +181,13 @@ onShow(() => {
 })
 
 const handlePlanPress = () => {
-	uni.showToast({
-		title: '训练计划功能开发中',
-		icon: 'none'
+	showTrainingCompleteWindow.value = true
+}
+
+const handleTrainingCompleteClose = () => {
+	showTrainingCompleteWindow.value = false
+	uni.reLaunch({
+		url: '/pages/index/index'
 	})
 }
 
@@ -188,9 +199,8 @@ const handleMoreCourses = () => {
 }
 
 const handleCourseClick = (course) => {
-	uni.showToast({
-		title: course.title + ' 开发中',
-		icon: 'none'
+	uni.navigateTo({
+		url: '/pages/partTraining/course-detail-adapter?id=' + course.id
 	})
 }
 </script>
