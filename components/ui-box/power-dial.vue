@@ -10,6 +10,7 @@
 <template>
 	<view 
 		class="power-dial"
+		:class="{ 'power-dial--busy': busy }"
 		:id="dialId"
 		:prop="syncData"
 		:change:prop="bindDial.onDataChange"
@@ -29,15 +30,16 @@
 		<image class="dial-decoration" src="/static/icons/freeTrainingActivity/ic_decoration.png" mode="aspectFit" />
 
 		<!-- 中心按钮：关机状态显示电源图标 -->
-		<view v-if="!viewPowerOn" class="dial-center-btn" @tap.stop="onPowerTap">
+		<view v-if="!viewPowerOn" class="dial-center-btn" :class="{ 'dial-center-btn--busy': busy }" @tap.stop="onPowerTap">
 			<image class="power-icon" src="/static/icons/freeTrainingActivity/ic_power.svg" mode="aspectFit" />
+			<text v-if="busy" class="busy-label busy-label--off">{{ busyLabel }}</text>
 		</view>
 		
 		<!-- 中心按钮：开机状态显示模式名+kg值 -->
-		<view v-else class="dial-center-btn dial-center-btn--on" @tap.stop="onPowerTap">
+		<view v-else class="dial-center-btn dial-center-btn--on" :class="{ 'dial-center-btn--busy': busy }" @tap.stop="onPowerTap">
 			<text class="mode-name">{{ modeName }}</text>
 			<text class="kg-value">{{ displayValue }}</text>
-			<text class="kg-unit">kg</text>
+			<text class="kg-unit">{{ busy ? busyLabel : 'kg' }}</text>
 		</view>
 	</view>
 </template>
@@ -82,6 +84,14 @@ export default {
 			type: Boolean,
 			default: false
 		},
+		busy: {
+			type: Boolean,
+			default: false
+		},
+		busyLabel: {
+			type: String,
+			default: ''
+		},
 		controlledPower: {
 			type: Boolean,
 			default: false
@@ -116,6 +126,7 @@ export default {
 				max: this.max,
 				disabled: this.disabled,
 				powerOn: this.viewPowerOn,
+				busy: this.busy,
 				dialId: this.dialId
 			}
 		},
@@ -233,6 +244,7 @@ export default {
 			min: 5,
 			max: 55,
 			disabled: false,
+			busy: false,
 			powerOn: false,
 			isDragging: false,
 			
@@ -269,6 +281,7 @@ export default {
 				this.max = newData.max
 				this.currentValue = isNaN(val) ? this.min : Math.max(this.min, Math.min(val, this.max))
 				this.disabled = newData.disabled
+				this.busy = newData.busy
 				// 开关状态变化时，清除 kg-value 缓存（v-if 会重建 DOM）
 				if (this.powerOn !== newData.powerOn) {
 					this.valueEl = null
@@ -315,7 +328,7 @@ export default {
 		},
 		
 		onTouchStart(e) {
-			if (this.disabled || !this.powerOn) return
+			if (this.disabled || this.busy || !this.powerOn) return
 			
 			// 检查是否点击了中心按钮区域（让逻辑层处理）
 			const target = e.target
@@ -355,7 +368,7 @@ export default {
 		},
 		
 		onTouchMove(e) {
-			if (this.disabled || !this.powerOn || !this.isDragging) return
+			if (this.disabled || this.busy || !this.powerOn || !this.isDragging) return
 			
 			e.preventDefault()
 			e.stopPropagation()
@@ -482,6 +495,14 @@ export default {
 	user-select: none;
 }
 
+.power-dial--busy .dial-arc-progress {
+	animation: busyArcPulse 0.8s ease-in-out;
+}
+
+.power-dial--busy .dial-indicator-dot {
+	animation: busyDotPulse 0.8s ease-in-out;
+}
+
 .dial-arc-track {
 	position: absolute;
 	width: 100%;
@@ -597,6 +618,10 @@ export default {
 		inset 0 1rpx 2rpx rgba(255, 255, 255, 0.3);
 }
 
+.dial-center-btn--busy {
+	animation: busyButtonPulse 0.8s ease-in-out;
+}
+
 .power-icon {
 	width: 64rpx;
 	height: 64rpx;
@@ -621,5 +646,57 @@ export default {
 	font-size: 18rpx;
 	color: rgba(255, 255, 255, 0.8);
 	margin-top: 2rpx;
+}
+
+.busy-label {
+	position: absolute;
+	bottom: 28rpx;
+	left: 0;
+	right: 0;
+	text-align: center;
+	font-size: 20rpx;
+	font-weight: 600;
+	color: #6B7280;
+	line-height: 1;
+}
+
+.busy-label--off {
+	color: #5F7E35;
+}
+
+@keyframes busyButtonPulse {
+	0% {
+		transform: scale(1);
+	}
+	45% {
+		transform: scale(1.06);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
+@keyframes busyArcPulse {
+	0% {
+		filter: drop-shadow(0 0 6px rgba(0, 200, 83, 0.4));
+	}
+	45% {
+		filter: drop-shadow(0 0 18px rgba(0, 200, 83, 0.8));
+	}
+	100% {
+		filter: drop-shadow(0 0 8px rgba(0, 200, 83, 0.5));
+	}
+}
+
+@keyframes busyDotPulse {
+	0% {
+		transform: translate(-50%, -50%) scale(1);
+	}
+	45% {
+		transform: translate(-50%, -50%) scale(1.18);
+	}
+	100% {
+		transform: translate(-50%, -50%) scale(1);
+	}
 }
 </style>

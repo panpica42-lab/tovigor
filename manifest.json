@@ -1,9 +1,9 @@
 {
-    "name" : "Tovigor-ov",
+    "name" : "Tovigor-dev",
     "appid" : "__UNI__5D33EB6",
     "description" : "健身应用",
-    "versionName" : "5.1.9",
-    "versionCode" : "519",
+    "versionName" : "5.2.6",
+    "versionCode" : "526",
     "transformPx" : false,
     "vueVersion" : "3",
     "app-plus" : {
@@ -31,7 +31,7 @@
                     "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>",
                     "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>"
                 ],
-                "package" : "com.tovigor.fitness.ov"
+                "package" : "com.tovigor.fitness.dev"
             },
             "ios" : {
                 "dSYMs" : false
@@ -90,7 +90,7 @@
         "usingComponents" : true
     },
     "h5" : {
-        "title" : "Tovigor-ovt健身",
+        "title" : "Tovigor-dev健身",
         "router" : {
             "mode" : "hash"
         }

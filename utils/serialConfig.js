@@ -4,6 +4,23 @@
  * 切换 Android 板卡时，只改 ACTIVE_SERIAL_BOARD 一处即可。
  */
 export const SERIAL_BOARD_PRESETS = {
+	'debug-ttyS4': {
+		motor: {
+			path: '/dev/ttyS4',
+			baudRate: 115200,
+			dataBits: 8,
+			stopBits: 1,
+			parity: 'none'
+		},
+		lightStrip: {
+			enabled: false,
+			path: '',
+			baudRate: 115200,
+			dataBits: 8,
+			stopBits: 1,
+			parity: 'none'
+		}
+	},
 	'3568': {
 		motor: {
 			path: '/dev/ttyS9',
@@ -38,7 +55,7 @@ export const SERIAL_BOARD_PRESETS = {
 	}
 }
 
-// 可选值：'3568' | '3576'
+// 可选值：'debug-ttyS4' | '3568' | '3576'
 export const ACTIVE_SERIAL_BOARD = '3576'
 
 const activeBoardConfig = SERIAL_BOARD_PRESETS[ACTIVE_SERIAL_BOARD]

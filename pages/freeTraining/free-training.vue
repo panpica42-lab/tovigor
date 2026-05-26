@@ -3,104 +3,62 @@
 ============================================================================
 
 一、先说结论
-1. 这个页面里的 PowerDial 开关现在不是“点一下组件自己就切换成开/关”的乐观模式。
-2. 它已经改成“受控模式”：
+1. PowerDial 仍然是受控组件，视觉状态只读取页面里的 powerOn。
+2. 开关 UI 采用“用户意图 + App 命令状态”：
    - 用户点击按钮，只代表“提出一个开机/关机请求”
    - 页面收到请求后，去发送对应的串口命令
-   - 只有下位机回包确认后，页面里的 powerOn 真状态才会改变
-   - PowerDial 的视觉状态只跟这个 powerOn 真状态走
-3. 所以现在按钮不会在点击瞬间立刻变亮或变灰。
-   它只有在“设备确认已经开”或“设备确认已经关”之后，才会真正切换视觉状态。
+   - 开机时 startWorking 发出后立即把 powerOn 置为 true
+   - 关机时 stopForce 发出前立即把 powerOn 置为 false
+3. 开关切换后会进入 800ms 本地过渡锁：
+   - 显示“启动中/关闭中”的视觉提示
+   - 禁止用户连续快速点击或拖拽
+   - 800ms 后自动解除，不依赖下位机回包
 
 二、为什么要这样做
-1. 之前 PowerDial 是自管理状态组件：
-   - 一收到点击事件，就先把自己切成“开”或“关”
-   - 再通知页面去发串口命令
-2. 这种写法的风险是：
-   - UI 先说自己已经关了，但电机未必真的关了
-   - UI 先说自己已经开了，但下位机未必已经切到工作态
-3. 这会造成“视觉状态”和“设备真实状态”脱节，用户看到的开关状态不可靠。
-4. 现在这版的目标就是：按钮只显示“真状态”，不显示“点击意图”。
+1. 实测存在“工作帧已经下发、电机已经开始工作，但上行回包没有在 5 秒内精确匹配 setForce/setForceMode”的情况。
+2. 如果开机也强依赖回包确认，UI 会停留在关闭态，随后超时逻辑还可能发 stopForce。
+3. 下位机回包可以用于诊断和数据展示，但不应该控制主按钮状态。
+4. 对开关来说，真正要避免的是快速连点造成命令交错，所以用 800ms 本地过渡锁处理。
 
 三、现在点击“开”时到底会发生什么
 1. PowerDial 在受控模式下不会自己翻转 powerOn，而是发出 request-power-change 事件。
-2. 页面收到这个事件后，进入“等待开机确认”流程：
-   - 记录 pendingPowerAction = 'opening'
-   - 记录本次准备下发的目标力量值和目标模式
-   - 调用 serialService.startWorking(...)
-3. 在等待确认期间：
-   - PowerDial 会被禁用，防止重复点击或继续拖拽
-   - 页面不会立刻把 powerOn 设为 true
-4. 后续只要收到一帧回包，同时满足：
-   - p.setForceMode === 本次目标模式
-   - p.setForce === 本次目标力量
-   就认定“真开启成功”
-5. 只有到这一步，页面才会执行：
-   - powerOn.value = true
-   - 清除 pendingPowerAction
-   - PowerDial 才会真正显示为开启状态
+2. 页面先确认串口已连接，然后取当前力量值和模式。
+3. 页面进入 pendingPowerAction = 'opening'，启动 800ms 本地过渡锁。
+4. 页面调用 serialService.startWorking(...)，串口服务开始周期发送工作帧。
+5. 页面立即执行 powerOn.value = true，PowerDial 变为开启状态并显示“启动中”。
+6. 800ms 后解除过渡锁，允许继续操作。
+7. 如果串口未连接，本次开机请求会被忽略并写 trace 日志，不会假亮。
 
 四、现在点击“关”时到底会发生什么
-1. PowerDial 同样只发 request-power-change 事件，不自己先变灰。
-2. 页面收到关闭请求后，进入“等待关机确认”流程：
+1. PowerDial 同样只发 request-power-change 事件，页面决定状态。
+2. 页面收到关闭请求后：
    - 记录 pendingPowerAction = 'closing'
-   - 调用 serialService.stopForce(...)
+   - 立即执行 powerOn.value = false，PowerDial 变为关闭状态并显示“关闭中”
+   - 调用 serialService.stopForce()
 3. 这里的 stopForce 不是只发 1 次 OFF，而是：
    - 连续发送一段时间的 OFF 帧，确保下位机能收到关闭命令
-4. 与之前不同的是：
-   - 这次 stopForce 会带 keepPolling: true
-   - 也就是说，停力发送期间不会立刻停止读取
-   - 页面仍然可以继续接收下位机回包，用来确认“是否真的关掉了”
-5. 后续只要收到一帧回包满足：
-   - p.setForceMode === FORCE_MODE.OFF
-   就认定“真关闭成功”
-6. 只有到这一步，页面才会执行：
-   - powerOn.value = false
-   - 清除 pendingPowerAction
-   - 停止用于确认的读取
-   - PowerDial 才会真正显示为关闭状态
+4. 800ms 后解除过渡锁，允许继续操作。
 
-五、为什么关闭时还要额外保留读取
-1. serialService.stopForce() 内部原本会先 stopWorking()
-2. stopWorking() 以前会直接停掉轮询读取
-3. 如果关闭时立刻停读，就拿不到“mode == 0”的确认回包
-4. 所以这里专门让 stopForce 在自由训练页支持：
-   - 停力发送继续执行
-   - 读取暂时保留
-   - 等收到关闭确认回包后，再主动 stopReading()
+五、下位机回包现在做什么
+1. 回包继续用于数据看板、曲线、日志和后续诊断。
+2. 回包不再改变 powerOn。
+3. 回包不再清除 pendingPowerAction。
+4. 回包不再触发 stopForce。
 
-六、关闭的“发送时间”和“确认等待时间”现在是分开的
-1. stopForce 的 OFF 连续发送时间默认仍然是 2 秒左右
-2. 但本页对“关闭确认”的等待窗口是 POWER_CONFIRM_TIMEOUT
-3. 当前 POWER_CONFIRM_TIMEOUT = 5000ms
-4. 这意味着：
-   - 前 2 秒主要做停力命令补发
-   - 最长 5 秒内都允许继续等关闭确认回包
-5. 这样做是为了避免把 OFF 命令硬发 5 秒，但仍然给下位机足够的回包确认时间
+六、这套逻辑的核心原则
+1. PowerDial 只展示页面 powerOn，不自己拍板“我已经开了/关了”
+2. 主按钮状态只跟用户意图和 App 命令走
+3. 设备回包只做观察和诊断，不控制按钮
+4. 用 800ms 本地过渡锁防止快速连点造成命令交错
+5. 只有明确场景才发 stopForce：用户点关闭、离开页面、应用清理等
 
-七、如果 5 秒内一直收不到确认回包怎么办
-1. 当前实现不会无限卡住
-2. 页面会触发“确认超时”逻辑：
-   - opening 超时：调用 serialService.stopWorking()
-   - closing 超时：调用 serialService.stopReading()
-   - 然后清掉 pendingPowerAction，重新允许用户操作
-3. 也就是说：
-   - 不会因为一次确认失败就把旋钮永久锁死
-   - 但在超时之前，按钮会维持“尚未确认”的真状态显示
-
-八、这套逻辑的核心原则
-1. 点击按钮不是状态真相，回包确认才是状态真相
-2. PowerDial 只负责展示真状态，不负责自己拍板“我已经开了/关了”
-3. 页面 powerOn 是唯一可信状态源
-4. UI 可以慢几十到几百毫秒，但不能假装已经切换成功
-
-九、后续排查这段逻辑时，建议优先看这些关键词日志
+七、后续排查这段逻辑时，建议优先看这些关键词日志
 1. request-power-change
 2. onPowerRequest received
 3. doPowerOn begin / doPowerOff begin
-4. power on confirmed by frame
-5. power off confirmed by frame
-6. power confirm timeout
+4. doPowerOn dispatched startWorking
+5. doPowerOff dispatched stopForce
+6. power transition unlocked
 
 ============================================================================
 -->
@@ -212,6 +170,8 @@
 				:min="5"
 				:max="55"
 				:disabled="pendingPowerAction !== null"
+				:busy="pendingPowerAction !== null"
+				:busy-label="pendingPowerAction === 'opening' ? '启动中' : pendingPowerAction === 'closing' ? '关闭中' : ''"
 				:controlled-power="true"
 				:power-on="powerOn"
 				:initial-power-on="false"
@@ -282,14 +242,12 @@ let lastForce = DEFAULT_FORCE  // 力量记忆（页面销毁后失效）
 const powerOn = ref(false)
 const pendingPowerAction = ref(null)
 const POWER_TRACE_ENABLED = true
-const POWER_CONFIRM_TIMEOUT = 5000
+const POWER_TRANSITION_DURATION = 800
 let powerActionSeq = 0
 let lastDeviceSetForce = null
 let lastDeviceSetForceMode = null
 let lastDeviceSleepState = null
-let pendingConfirmForce = null
-let pendingConfirmMode = null
-let pendingPowerTimeout = null
+let pendingPowerTransitionTimer = null
 
 function formatTraceTime(ts = Date.now()) {
 	const date = new Date(ts)
@@ -310,36 +268,28 @@ function getDialPowerState() {
 	return typeof getter === 'function' ? getter.call(powerDialRef.value) : null
 }
 
-function clearPendingPowerConfirm() {
-	if (pendingPowerTimeout) {
-		clearTimeout(pendingPowerTimeout)
-		pendingPowerTimeout = null
+function clearPendingPowerTransition() {
+	if (pendingPowerTransitionTimer) {
+		clearTimeout(pendingPowerTransitionTimer)
+		pendingPowerTransitionTimer = null
 	}
 	pendingPowerAction.value = null
-	pendingConfirmForce = null
-	pendingConfirmMode = null
 }
 
-function schedulePendingPowerConfirmTimeout(action) {
-	if (pendingPowerTimeout) {
-		clearTimeout(pendingPowerTimeout)
+function schedulePendingPowerTransition(action) {
+	if (pendingPowerTransitionTimer) {
+		clearTimeout(pendingPowerTransitionTimer)
 	}
-	pendingPowerTimeout = setTimeout(() => {
-		pendingPowerTimeout = null
-		tracePower('power confirm timeout', {
+	pendingPowerTransitionTimer = setTimeout(() => {
+		pendingPowerTransitionTimer = null
+		tracePower('power transition unlocked', {
 			action,
 			actionId: powerActionSeq,
 			pagePowerOn: powerOn.value,
 			dialPowerOn: getDialPowerState()
 		})
-		if (action === 'opening') {
-			serialService.stopForce()
-		}
-		if (action === 'closing') {
-			serialService.stopReading()
-		}
-		clearPendingPowerConfirm()
-	}, POWER_CONFIRM_TIMEOUT)
+		pendingPowerAction.value = null
+	}, POWER_TRANSITION_DURATION)
 }
 
 // 模式列表（恒力排在最前面）
@@ -640,34 +590,6 @@ const handleFrame = (data) => {
 			dialPowerOn: getDialPowerState()
 		})
 	}
-	if (
-		pendingPowerAction.value === 'opening' &&
-		p.setForceMode === pendingConfirmMode &&
-		p.setForce === pendingConfirmForce
-	) {
-		powerOn.value = true
-		tracePower('power on confirmed by frame', {
-			actionId: powerActionSeq,
-			setForce: p.setForce,
-			setForceMode: p.setForceMode,
-			setForceModeText: p.setForceModeText
-		})
-		clearPendingPowerConfirm()
-	}
-	if (
-		pendingPowerAction.value === 'closing' &&
-		p.setForceMode === FORCE_MODE.OFF
-	) {
-		powerOn.value = false
-		tracePower('power off confirmed by frame', {
-			actionId: powerActionSeq,
-			setForce: p.setForce,
-			setForceMode: p.setForceMode,
-			setForceModeText: p.setForceModeText
-		})
-		clearPendingPowerConfirm()
-		serialService.stopReading()
-	}
 	// 开机后第一帧：捕获基准值
 	if (needCaptureBaseline) {
 		countBaseline = p.sportCount
@@ -733,7 +655,7 @@ onBeforeUnmount(() => {
 	if (powerOn.value || pendingPowerAction.value !== null) {
 		serialService.stopForce()
 	}
-	clearPendingPowerConfirm()
+	clearPendingPowerTransition()
 })
 
 // Android 返回键处理
@@ -779,15 +701,26 @@ function getSelectedForceMode() {
 }
 
 function doPowerOn() {
+	const status = serialService.getStatus()
+	if (!status.isConnected) {
+		tracePower('doPowerOn ignored: serial not connected', {
+			status,
+			dialValue: dialValue.value,
+			modeIndex: selectedMode.value
+		})
+		return
+	}
+
+	const targetForce = dialValue.value
+	const targetMode = getSelectedForceMode()
+
 	pendingPowerAction.value = 'opening'
-	pendingConfirmForce = dialValue.value
-	pendingConfirmMode = getSelectedForceMode()
-	schedulePendingPowerConfirmTimeout('opening')
+	schedulePendingPowerTransition('opening')
 	tracePower('doPowerOn begin', {
 		actionId: powerActionSeq,
-		dialValue: dialValue.value,
+		dialValue: targetForce,
 		modeIndex: selectedMode.value,
-		forceMode: pendingConfirmMode,
+		forceMode: targetMode,
 		pagePowerOn: powerOn.value,
 		pendingPowerAction: pendingPowerAction.value,
 		dialPowerOn: getDialPowerState()
@@ -805,11 +738,12 @@ function doPowerOn() {
 		}
 	}, 1000)
 
-	serialService.startWorking(pendingConfirmForce, pendingConfirmMode, 200)
+	serialService.startWorking(targetForce, targetMode, 200)
+	powerOn.value = true
 	tracePower('doPowerOn dispatched startWorking', {
 		actionId: powerActionSeq,
-		dialValue: pendingConfirmForce,
-		forceMode: pendingConfirmMode,
+		dialValue: targetForce,
+		forceMode: targetMode,
 		pagePowerOn: powerOn.value,
 		pendingPowerAction: pendingPowerAction.value,
 		dialPowerOn: getDialPowerState()
@@ -818,9 +752,8 @@ function doPowerOn() {
 
 function doPowerOff() {
 	pendingPowerAction.value = 'closing'
-	pendingConfirmForce = null
-	pendingConfirmMode = FORCE_MODE.OFF
-	schedulePendingPowerConfirmTimeout('closing')
+	schedulePendingPowerTransition('closing')
+	powerOn.value = false
 	tracePower('doPowerOff begin', {
 		actionId: powerActionSeq,
 		dialValue: dialValue.value,
@@ -832,10 +765,7 @@ function doPowerOff() {
 	if (activeTimer) { clearInterval(activeTimer); activeTimer = null }
 	lastSportCount = null
 	resetLiveBar()
-	serialService.stopForce({
-		keepPolling: true,
-		pollingDuration: POWER_CONFIRM_TIMEOUT
-	})
+	serialService.stopForce()
 	dialValue.value = lastForce
 	tracePower('doPowerOff dispatched stopForce', {
 		actionId: powerActionSeq,
