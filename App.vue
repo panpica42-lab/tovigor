@@ -1,5 +1,6 @@
 <script>
 import serialService from '@/utils/serialService.js'
+import { SERIAL_DEVICES } from '@/utils/serialConfig.js'
 
 // ========== 调试开关 ==========
 const DEBUG_MODE = false  // true: 禁用串口连接，false: 启用串口连接
@@ -26,12 +27,10 @@ export default {
   methods: {
     // 初始化串口连接
     async initSerialConnection() {
-      console.log('[App] 正在初始化串口连接...')
+      const motorSerialConfig = SERIAL_DEVICES.motor
+      console.log('[App] 正在初始化串口连接...', motorSerialConfig)
       try {
-        const result = await serialService.connect({
-          path: '/dev/ttyS9',
-          baudRate: 115200
-        })
+        const result = await serialService.connect(motorSerialConfig)
         console.log('[App] 串口连接成功:', result)
       } catch (err) {
         console.error('[App] 串口连接失败:', err)

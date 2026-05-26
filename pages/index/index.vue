@@ -122,7 +122,7 @@
 		<view class="course-section">
 			<view class="section-header">
 				<text class="section-title">课程推荐</text>
-				<view class="debug-buttons">
+				<view v-if="SHOW_HOME_DEBUG_BUTTONS" class="debug-buttons">
 					<view class="serial-test-btn light-strip-btn" @click="goToLightStripControl">
 						<text class="serial-test-text">灯带控制</text>
 					</view>
@@ -242,6 +242,9 @@ import { partTrainingCourses } from '@/pages/partTraining/course-data.js'
 const courseList = ref(partTrainingCourses)
 const scrollHeight = ref(0)
 let resizeHandler = null
+
+// 主界面调试入口开关：灯带控制、串口v1、串口v2
+const SHOW_HOME_DEBUG_BUTTONS = false
 
 // 使用指南弹窗
 const showGuideModal = ref(false)

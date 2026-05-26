@@ -17,11 +17,6 @@
 		<view class="content">
 			<!-- 人体模型区域 -->
 			<view class="body-model-area">
-				<!-- 临时按钮：查看旧版 -->
-				<view class="temp-btn" @click="goToOldVersion">
-					<text class="temp-btn-text">旧版</text>
-				</view>
-				
 				<!-- 人体图片 -->
 				<image 
 					class="body-image" 
@@ -163,13 +158,6 @@ const handleStartAssess = () => {
 		url: '/pages/smartAssess/body-strength-assess/strength-assess'
 	})
 }
-
-// 临时：跳转到旧版页面
-const goToOldVersion = () => {
-	uni.navigateTo({
-		url: '/pages/smartAssess/body-strength-assess/strength-display-old'
-	})
-}
 </script>
 
 <style scoped lang="scss">
@@ -294,22 +282,6 @@ const goToOldVersion = () => {
 .start-btn-text {
 	font-size: 32rpx;
 	font-weight: 600;
-	color: #FFFFFF;
-}
-
-/* 临时按钮 - 绝对定位右上角 */
-.temp-btn {
-	position: absolute;
-	top: 10rpx;
-	right: 10rpx;
-	z-index: 100;
-	padding: 10rpx 20rpx;
-	background: rgba(0, 0, 0, 0.5);
-	border-radius: 6rpx;
-}
-
-.temp-btn-text {
-	font-size: 20rpx;
 	color: #FFFFFF;
 }
 </style>
