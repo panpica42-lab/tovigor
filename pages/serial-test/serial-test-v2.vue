@@ -82,6 +82,28 @@
           :class="{ 'btn-stress-active': isStressTesting2 }"
         >压测2 <text v-if="isStressTesting2">({{ stressTest2Remaining }})</text></button>
       </view>
+      <view class="command-builder">
+        <text class="label">指令构建器:</text>
+        <view class="builder-row">
+          <view class="builder-field">
+            <text class="builder-label">力量 (kg)</text>
+            <view class="stepper">
+              <button @click="decreaseBuilderForce" class="stepper-btn">-</button>
+              <view class="stepper-value">{{ builderForce }}</view>
+              <button @click="increaseBuilderForce" class="stepper-btn">+</button>
+            </view>
+          </view>
+          <view class="builder-field">
+            <text class="builder-label">模式</text>
+            <view class="stepper">
+              <button @click="decreaseBuilderMode" class="stepper-btn">-</button>
+              <view class="stepper-value">{{ currentBuilderModeLabel }}</view>
+              <button @click="increaseBuilderMode" class="stepper-btn">+</button>
+            </view>
+          </view>
+        </view>
+        <button @click="handleBuildCommand" class="btn btn-secondary builder-button">构建并填入</button>
+      </view>
     </view>
     
     <!-- 数据接收 - 完整帧 -->
@@ -406,11 +428,29 @@ const baudRateIndex = ref(4) // 默认 115200
 const isConnected = ref(false)
 const sendData = ref('')
 const pluginVersion = ref('')
+const builderForce = ref(10)
+const builderModeIndex = ref(0)
+const forceModes = [
+  { name: '关闭', value: serial.FORCE_MODE.OFF },
+  { name: '恒力', value: serial.FORCE_MODE.CONST },
+  { name: '向心', value: serial.FORCE_MODE.CONC_ISO },
+  { name: '离心', value: serial.FORCE_MODE.ECC_ISO },
+  { name: '流体', value: serial.FORCE_MODE.FLUID },
+  { name: '等速', value: serial.FORCE_MODE.BALANCE },
+  { name: '弹力', value: serial.FORCE_MODE.ELASTIC }
+]
+const currentBuilderModeLabel = computed(() => {
+  const mode = forceModes[builderModeIndex.value]
+  if (!mode) {
+    return ''
+  }
+  return `${mode.value}(${mode.name})`
+})
 
 // 消息列表
 const frameMessages = ref([])  // 完整帧（经过帧解析）
 const rawMessages = ref([])    // 原始数据（调试用）
-const maxMessages = 200
+const maxMessages = 50
 
 // 帧详情
 const latestA9Frame = ref(null)  // 最新的 A9 帧解析结果
@@ -428,6 +468,9 @@ let stressTest2Timer = null
 // UI 刷新相关
 let frameBuffer = []
 let rawBuffer = []
+let pendingLatestA9Frame = null
+let frameBufferDirty = false
+let rawBufferDirty = false
 let uiRefreshTimer = null
 const UI_REFRESH_INTERVAL = 200  // 200ms 刷新一次 UI
 
@@ -449,10 +492,11 @@ const handleFrame = (data) => {
   if (frameBuffer.length > maxMessages) {
     frameBuffer.pop()
   }
+  frameBufferDirty = true
   
-  // 更新最新 A9 帧详情
+  // A9 详情也走批次刷新，避免逐帧触发大块 UI 重渲染
   if (data.parsed?.type === 'A9') {
-    latestA9Frame.value = data.parsed
+    pendingLatestA9Frame = data.parsed
   }
 }
 
@@ -466,6 +510,7 @@ const handleRaw = (data) => {
   if (rawBuffer.length > maxMessages) {
     rawBuffer.pop()
   }
+  rawBufferDirty = true
 }
 
 // 连接成功
@@ -590,12 +635,15 @@ onBeforeUnmount(() => {
 const startUiRefresh = () => {
   stopUiRefresh()
   uiRefreshTimer = setInterval(() => {
-    // 批量同步到响应式变量
-    if (frameBuffer.length > 0) {
+    // 只有收到新数据时才同步到响应式变量，减少空转重渲染
+    if (frameBufferDirty) {
       frameMessages.value = [...frameBuffer]
+      latestA9Frame.value = pendingLatestA9Frame
+      frameBufferDirty = false
     }
-    if (rawBuffer.length > 0) {
+    if (rawBufferDirty) {
       rawMessages.value = [...rawBuffer]
+      rawBufferDirty = false
     }
   }, UI_REFRESH_INTERVAL)
 }
@@ -639,6 +687,53 @@ const handleSend = async () => {
 
 const handleSendQuick = (data) => {
   sendData.value = data
+}
+
+const decreaseBuilderForce = () => {
+  if (builderForce.value > 0) {
+    builderForce.value -= 1
+  }
+}
+
+const increaseBuilderForce = () => {
+  if (builderForce.value < 255) {
+    builderForce.value += 1
+  }
+}
+
+const decreaseBuilderMode = () => {
+  if (builderModeIndex.value > 0) {
+    builderModeIndex.value -= 1
+  }
+}
+
+const increaseBuilderMode = () => {
+  if (builderModeIndex.value < forceModes.length - 1) {
+    builderModeIndex.value += 1
+  }
+}
+
+const handleBuildCommand = () => {
+  const force = builderForce.value
+  if (!Number.isInteger(force) || force < 0 || force > 255) {
+    uni.showToast({ title: '力量必须是0-255的整数kg', icon: 'none' })
+    return
+  }
+  
+  const mode = forceModes[builderModeIndex.value]?.value
+  if (mode === undefined) {
+    uni.showToast({ title: '请选择有效模式', icon: 'none' })
+    return
+  }
+  
+  const frame = serial.buildD180Frame({
+    index: 0,
+    force,
+    forceMode: mode,
+    lock: 0
+  })
+  sendData.value = frame.hex
+  uni.showToast({ title: '指令已填入发送框', icon: 'success', duration: 1000 })
 }
 
 // ============ 扫描设备 ============
@@ -759,12 +854,15 @@ const stopStressTest2 = () => {
 
 const clearFrames = () => {
   frameBuffer = []
+  pendingLatestA9Frame = null
+  frameBufferDirty = false
   frameMessages.value = []
   latestA9Frame.value = null
 }
 
 const clearRaw = () => {
   rawBuffer = []
+  rawBufferDirty = false
   rawMessages.value = []
 }
 
@@ -983,6 +1081,67 @@ const formatTime = (timestamp) => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.command-builder {
+  margin-top: 24rpx;
+  padding-top: 24rpx;
+  border-top: 2rpx solid #f0f0f0;
+}
+
+.builder-row {
+  display: flex;
+  gap: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.builder-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.stepper-btn {
+  width: 72rpx;
+  min-width: 72rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  padding: 0;
+  border-radius: 10rpx;
+  border: none;
+  background-color: #f5f5f5;
+  color: #333;
+  font-size: 36rpx;
+  flex: none;
+}
+
+.stepper-value {
+  flex: 1;
+  height: 72rpx;
+  line-height: 72rpx;
+  text-align: center;
+  border: 2rpx solid #e0e0e0;
+  border-radius: 10rpx;
+  background-color: #fafafa;
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #333;
+}
+
+.builder-label {
+  font-size: 24rpx;
+  color: #666;
+  display: block;
+  margin-bottom: 8rpx;
+}
+
+.builder-button {
+  width: 100%;
 }
 
 .received-header {
